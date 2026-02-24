@@ -160,6 +160,9 @@ body {
 }
 
 .bar-link {
+  color: inherit;
+  display: inline;
+  width: auto;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }

@@ -203,18 +203,23 @@ function createBar(instance) {
   bar.tabIndex = 0;
   bar.title = instance.link ? `${instance.lecture}\nClick text to open link` : instance.lecture;
 
-  const label = instance.link ? document.createElement("a") : document.createElement("span");
-  label.className = instance.link ? "bar-label bar-link" : "bar-label";
-  label.textContent = instance.lecture;
+  const label = document.createElement("span");
+  label.className = "bar-label";
 
   if (instance.link) {
-    label.href = instance.link;
-    label.target = "_blank";
-    label.rel = "noopener noreferrer";
-    label.title = instance.link;
-    label.addEventListener("click", (event) => {
+    const link = document.createElement("a");
+    link.className = "bar-link";
+    link.href = instance.link;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.title = instance.link;
+    link.textContent = instance.lecture;
+    link.addEventListener("click", (event) => {
       event.stopPropagation();
     });
+    label.appendChild(link);
+  } else {
+    label.textContent = instance.lecture;
   }
 
   if (instance.color) {

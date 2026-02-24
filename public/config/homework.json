@@ -7,7 +7,7 @@
       "deadline": "2026-02-27T12:00:00",
       "repeatWeekly": true,
       "color": "#3A86FF",
-      "link": "https://example.com/homework/quantum-mechanics"
+      "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=25943"
     },
     {
       "id": "Particle Physics",
@@ -16,7 +16,7 @@
       "deadline": "2026-02-23T12:00:00",
       "repeatWeekly": true,
       "color": "#FF006E",
-      "link": "https://example.com/homework/particle-physics"
+      "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=27528"
     },
     {
       "id": "Quantum Electronics",
@@ -25,7 +25,7 @@
       "deadline": "2026-02-23T12:00:00",
       "repeatWeekly": true,
       "color": "#8338EC",
-      "link": "https://example.com/homework/quantum-electronics"
+      "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=27676"
     },
     {
       "id": "Optimization",
@@ -34,7 +34,7 @@
       "deadline": "2026-02-26T12:00:00",
       "repeatWeekly": true,
       "color": "#FB5607",
-      "link": "https://example.com/homework/optimization"
+      "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=26810"
     },
     {
       "id": "Electronics",
@@ -43,7 +43,7 @@
       "deadline": "2026-02-26T12:00:00",
       "repeatWeekly": true,
       "color": "#2A9D8F",
-      "link": "https://example.com/homework/electronics"
+      "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=27554"
     },
     {
       "id": "Geology",
@@ -52,7 +52,7 @@
       "deadline": "2026-02-26T12:00:00",
       "repeatWeekly": true,
       "color": "#FFBE0B",
-      "link": "https://example.com/homework/geology"
+      "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=27606"
     }
   ]
 }
