@@ -1,9 +1,0 @@
-name = "homework-gantt"
-compatibility_date = "2026-02-24"
-pages_build_output_dir = "./public"
-
-[[kv_namespaces]]
-binding = "HOMEWORK_KV"
-# Replace these IDs with real namespace IDs from `wrangler kv namespace create`.
-id = "00000000000000000000000000000000"
-preview_id = "11111111111111111111111111111111"

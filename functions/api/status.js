@@ -33,7 +33,10 @@ export async function onRequest(context) {
 
   if (!env.HOMEWORK_KV) {
     return json(
-      { error: "Missing KV binding. Configure HOMEWORK_KV in wrangler.toml." },
+      {
+        error:
+          "Missing KV binding. Configure HOMEWORK_KV in Cloudflare Pages settings.",
+      },
       500,
     );
   }

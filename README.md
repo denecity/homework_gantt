@@ -14,7 +14,11 @@ Config-driven homework tracker with:
 - `public/styles.css` - styling
 - `public/config/homework.json` - assignment config
 - `functions/api/status.js` - persistent API for done status
-- `wrangler.toml` - Cloudflare Pages + KV bindings
+
+## Deployment model
+
+- Cloudflare Pages with Git integration (branch: `main`)
+- Dashboard-managed bindings (KV is configured in Pages settings, not in repo)
 
 ## Edit assignments
 
@@ -39,19 +43,44 @@ Notes:
 - `id` must stay stable so done state persists.
 - Date-time strings are interpreted in browser local time when no timezone suffix is provided.
 
-## Cloudflare setup
+## Cloudflare Pages setup (Git-based)
 
-1. Create KV namespaces:
-   - `npx wrangler@3 kv namespace create HOMEWORK_KV`
-   - `npx wrangler@3 kv namespace create HOMEWORK_KV --preview`
-2. Put returned IDs into `wrangler.toml` (`id` and `preview_id`).
-3. Create Pages project once:
-   - `npx wrangler@3 pages project create homework-gantt`
-4. Deploy:
-   - `npx wrangler@3 pages deploy public --project-name homework-gantt`
+1. Ensure this repo is connected as a **Pages** project.
+2. Build settings (Production + Preview):
+   - Framework preset: `None`
+   - Build command: *(leave empty)*
+   - Build output directory: `public`
+   - Root directory: `/`
+   - Production branch: `main`
+3. Configure KV namespaces in Cloudflare:
+   - Create one production namespace for done-state persistence.
+   - Create one preview namespace for preview deployments.
+4. In Pages project settings, add KV binding:
+   - Variable name: `HOMEWORK_KV`
+   - Production environment -> production namespace
+   - Preview environment -> preview namespace
+5. Deploy by pushing commits to `main`.
+
+Expected successful deploy behavior:
+
+- no `Executing user deploy command: npx wrangler deploy`
+- no `Missing entry-point to Worker script or to assets directory`
+- Pages deployment publishes successfully
 
 ## Local dev
 
-- `npx wrangler@3 pages dev public`
+- Static preview (no persistence): `python3 -m http.server 8788 --directory public`
+- Then open `http://localhost:8788`
 
-This runs static files and Pages Functions together.
+Notes:
+
+- Local static preview does not provide `/api/status`.
+- The UI still loads assignments; persistence works once deployed with KV binding.
+
+## Temporary fallback (if migration is blocked)
+
+If your current pipeline still forces a deploy command, use:
+
+- `npx wrangler pages deploy public --project-name homework-gantt`
+
+This is only a temporary unblock. Preferred setup is native Pages Git builds.
