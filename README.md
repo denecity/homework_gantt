@@ -84,3 +84,19 @@ If your current pipeline still forces a deploy command, use:
 - `npx wrangler pages deploy public --project-name homework-gantt`
 
 This is only a temporary unblock. Preferred setup is native Pages Git builds.
+
+## Troubleshooting
+
+If deploy logs show `Executing user deploy command: npx wrangler deploy`, this is a Worker deployment, not Pages Functions.
+
+Symptoms:
+
+- site opens, but checking homework does not sync
+- `/api/status` returns `404`
+- deployment URL is `*.workers.dev`
+
+Fix:
+
+1. Move to Cloudflare Pages Git build settings (section above).
+2. Keep build command empty and output directory `public`.
+3. Add `HOMEWORK_KV` binding in Pages settings for both Production and Preview.

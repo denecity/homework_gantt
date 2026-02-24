@@ -2,6 +2,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const VISIBLE_DAYS = 10;
 const HALF_WINDOW_MS = (VISIBLE_DAYS / 2) * MS_PER_DAY;
 const TICK_MS = 1000;
+const LOCAL_DONE_KEY = "homework_done_map_local_v1";
 
 const axisLane = document.getElementById("axisLane");
 const rowsEl = document.getElementById("rows");
@@ -11,10 +12,33 @@ const state = {
   assignments: [],
   doneMap: {},
   rowRefs: [],
+  persistenceMode: "unknown",
 };
 
 function showStatus(message) {
   statusText.textContent = message || "";
+}
+
+function readLocalDoneMap() {
+  try {
+    const raw = localStorage.getItem(LOCAL_DONE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalDoneMap(map) {
+  try {
+    localStorage.setItem(LOCAL_DONE_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore localStorage errors; UI can still work in-memory.
+  }
 }
 
 function parseAssignments(raw) {
@@ -98,15 +122,18 @@ function createRow(assignment) {
     checkbox.disabled = true;
     setDoneVisual(meta, lane, done);
     state.doneMap[assignment.id] = done;
+    writeLocalDoneMap(state.doneMap);
 
     try {
       await saveDoneState(assignment.id, done);
-      showStatus("");
+      if (state.persistenceMode === "remote") {
+        showStatus("");
+      } else {
+        showStatus("Saved on this device only. Cloud sync is unavailable.");
+      }
     } catch (error) {
-      checkbox.checked = !done;
-      setDoneVisual(meta, lane, !done);
-      state.doneMap[assignment.id] = !done;
-      showStatus(`Could not save "${assignment.title}". Check KV binding and try again.`);
+      state.persistenceMode = "local";
+      showStatus(`Saved "${assignment.title}" locally only. Cloud sync is unavailable.`);
       console.error(error);
     } finally {
       checkbox.disabled = false;
@@ -201,7 +228,9 @@ async function fetchAssignments() {
 async function fetchDoneMap() {
   const response = await fetch("/api/status", { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`Status fetch failed (${response.status})`);
+    const error = new Error(`Status fetch failed (${response.status})`);
+    error.status = response.status;
+    throw error;
   }
 
   const data = await response.json();
@@ -209,6 +238,10 @@ async function fetchDoneMap() {
 }
 
 async function saveDoneState(id, done) {
+  if (state.persistenceMode !== "remote") {
+    return;
+  }
+
   const response = await fetch("/api/status", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -221,6 +254,7 @@ async function saveDoneState(id, done) {
 
   const data = await response.json();
   state.doneMap = data.done || {};
+  writeLocalDoneMap(state.doneMap);
 }
 
 function buildRows() {
@@ -241,13 +275,25 @@ async function init() {
   try {
     const assignments = await fetchAssignments();
     state.assignments = assignments;
+    state.doneMap = readLocalDoneMap();
 
     try {
-      state.doneMap = await fetchDoneMap();
+      const remoteDoneMap = await fetchDoneMap();
+      state.doneMap = remoteDoneMap;
+      writeLocalDoneMap(state.doneMap);
+      state.persistenceMode = "remote";
       showStatus("");
     } catch (error) {
-      state.doneMap = {};
-      showStatus("Assignments loaded. Persistent status unavailable until KV is configured.");
+      state.persistenceMode = "local";
+      if (error && error.status === 404) {
+        showStatus(
+          "Assignments loaded. /api/status not found; using local device storage only.",
+        );
+      } else {
+        showStatus(
+          "Assignments loaded. Cloud persistence unavailable; using local device storage only.",
+        );
+      }
       console.error(error);
     }
 
