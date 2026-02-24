@@ -1,7 +1,9 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const VISIBLE_DAYS = 10;
 const HALF_WINDOW_MS = (VISIBLE_DAYS / 2) * MS_PER_DAY;
+const REPEAT_INTERVAL_MS = 7 * MS_PER_DAY;
 const TICK_MS = 1000;
+const INSTANCE_REFRESH_MS = 60 * 1000;
 const LOCAL_DONE_KEY = "homework_done_map_local_v1";
 
 const axisLane = document.getElementById("axisLane");
@@ -10,9 +12,11 @@ const statusText = document.getElementById("statusText");
 
 const state = {
   assignments: [],
+  instances: [],
   doneMap: {},
   rowRefs: [],
   persistenceMode: "unknown",
+  lastInstanceBuildMs: 0,
 };
 
 function showStatus(message) {
@@ -37,8 +41,17 @@ function writeLocalDoneMap(map) {
   try {
     localStorage.setItem(LOCAL_DONE_KEY, JSON.stringify(map));
   } catch {
-    // Ignore localStorage errors; UI can still work in-memory.
+    // Ignore localStorage errors; UI still works in-memory.
   }
+}
+
+function sanitizeHexColor(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const color = value.trim();
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color) ? color : null;
 }
 
 function parseAssignments(raw) {
@@ -60,94 +73,15 @@ function parseAssignments(raw) {
 
       return {
         id: String(item.id),
-        title: String(item.title || item.id),
+        lecture: String(item.lecture || item.title || item.id),
         releaseMs: startMs,
         deadlineMs: endMs,
-        color: item.color ? String(item.color) : null,
+        repeatWeekly: Boolean(item.repeatWeekly || item.weeklyRepeat),
+        color: sanitizeHexColor(item.color),
       };
     })
     .filter(Boolean)
-    .sort((a, b) => a.deadlineMs - b.deadlineMs);
-}
-
-function formatDate(ms) {
-  return new Date(ms).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function createRow(assignment) {
-  const meta = document.createElement("div");
-  meta.className = "row-meta";
-
-  const labelWrap = document.createElement("div");
-  labelWrap.className = "label-wrap";
-
-  const title = document.createElement("div");
-  title.className = "title";
-  title.textContent = assignment.title;
-
-  const dates = document.createElement("div");
-  dates.className = "dates";
-  dates.textContent = `${formatDate(assignment.releaseMs)} to ${formatDate(assignment.deadlineMs)}`;
-
-  labelWrap.append(title, dates);
-
-  const doneToggle = document.createElement("label");
-  doneToggle.className = "done-toggle";
-
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.checked = Boolean(state.doneMap[assignment.id]);
-  checkbox.setAttribute("aria-label", `Mark ${assignment.title} as done`);
-
-  doneToggle.append(checkbox);
-  meta.append(labelWrap, doneToggle);
-
-  const lane = document.createElement("div");
-  lane.className = "row-lane";
-
-  const bar = document.createElement("div");
-  bar.className = "bar";
-  if (assignment.color) {
-    bar.style.backgroundColor = assignment.color;
-  }
-  lane.appendChild(bar);
-
-  checkbox.addEventListener("change", async () => {
-    const done = checkbox.checked;
-    checkbox.disabled = true;
-    setDoneVisual(meta, lane, done);
-    state.doneMap[assignment.id] = done;
-    writeLocalDoneMap(state.doneMap);
-
-    try {
-      await saveDoneState(assignment.id, done);
-      if (state.persistenceMode === "remote") {
-        showStatus("");
-      } else {
-        showStatus("Saved on this device only. Cloud sync is unavailable.");
-      }
-    } catch (error) {
-      state.persistenceMode = "local";
-      showStatus(`Saved "${assignment.title}" locally only. Cloud sync is unavailable.`);
-      console.error(error);
-    } finally {
-      checkbox.disabled = false;
-    }
-  });
-
-  setDoneVisual(meta, lane, checkbox.checked);
-  rowsEl.append(meta, lane);
-  return { assignment, meta, lane, bar };
-}
-
-function setDoneVisual(meta, lane, done) {
-  meta.classList.toggle("done", done);
-  lane.classList.toggle("done", done);
+    .sort((a, b) => a.releaseMs - b.releaseMs);
 }
 
 function xForTime(ms, nowMs, width) {
@@ -156,63 +90,220 @@ function xForTime(ms, nowMs, width) {
   return progress * width;
 }
 
-function renderAxis(nowMs, width) {
-  axisLane.innerHTML = "";
+function overlapsWindow(startMs, endMs, windowStart, windowEnd) {
+  return endMs >= windowStart && startMs <= windowEnd;
+}
 
-  const startMs = nowMs - HALF_WINDOW_MS;
-  const endMs = nowMs + HALF_WINDOW_MS;
-  const firstTick = new Date(startMs);
-  firstTick.setHours(0, 0, 0, 0);
+function buildInstance(assignment, releaseMs, deadlineMs, repeatIndex) {
+  const doneKey = assignment.repeatWeekly ? `${assignment.id}::${repeatIndex}` : assignment.id;
 
-  for (let tickMs = firstTick.getTime(); tickMs <= endMs + MS_PER_DAY; tickMs += MS_PER_DAY) {
-    const x = xForTime(tickMs, nowMs, width);
-    if (x < -80 || x > width + 80) {
+  return {
+    instanceId: `${assignment.id}@${repeatIndex}`,
+    doneKey,
+    lecture: assignment.lecture,
+    color: assignment.color,
+    releaseMs,
+    deadlineMs,
+  };
+}
+
+function expandAssignmentsForWindow(assignments, nowMs) {
+  const windowStart = nowMs - HALF_WINDOW_MS;
+  const windowEnd = nowMs + HALF_WINDOW_MS;
+  const instances = [];
+
+  for (const assignment of assignments) {
+    if (!assignment.repeatWeekly) {
+      if (overlapsWindow(assignment.releaseMs, assignment.deadlineMs, windowStart, windowEnd)) {
+        instances.push(buildInstance(assignment, assignment.releaseMs, assignment.deadlineMs, 0));
+      }
       continue;
     }
 
-    const tick = document.createElement("div");
-    tick.className = "tick";
-    tick.style.left = `${x}px`;
+    const kMin = Math.ceil((windowStart - assignment.deadlineMs) / REPEAT_INTERVAL_MS);
+    const kMax = Math.floor((windowEnd - assignment.releaseMs) / REPEAT_INTERVAL_MS);
 
-    const label = document.createElement("div");
-    label.className = "tick-label";
-    label.style.left = `${x}px`;
-    label.textContent = new Date(tickMs).toLocaleDateString([], {
-      month: "short",
-      day: "numeric",
-    });
+    for (let repeatIndex = kMin; repeatIndex <= kMax; repeatIndex += 1) {
+      const releaseMs = assignment.releaseMs + repeatIndex * REPEAT_INTERVAL_MS;
+      const deadlineMs = assignment.deadlineMs + repeatIndex * REPEAT_INTERVAL_MS;
 
-    axisLane.append(tick, label);
+      if (overlapsWindow(releaseMs, deadlineMs, windowStart, windowEnd)) {
+        instances.push(buildInstance(assignment, releaseMs, deadlineMs, repeatIndex));
+      }
+    }
   }
+
+  return instances.sort((a, b) => {
+    if (a.releaseMs !== b.releaseMs) {
+      return a.releaseMs - b.releaseMs;
+    }
+    return a.lecture.localeCompare(b.lecture);
+  });
+}
+
+function setDoneVisual(lane, bar, done) {
+  lane.classList.toggle("done", done);
+  bar.classList.toggle("done", done);
+  bar.setAttribute("aria-pressed", done ? "true" : "false");
+}
+
+async function toggleBar(instance, lane, bar) {
+  const done = !Boolean(state.doneMap[instance.doneKey]);
+  bar.disabled = true;
+  state.doneMap[instance.doneKey] = done;
+  writeLocalDoneMap(state.doneMap);
+  setDoneVisual(lane, bar, done);
+
+  try {
+    await saveDoneState(instance.doneKey, done);
+    if (state.persistenceMode === "remote") {
+      showStatus("");
+    } else {
+      showStatus("Saved on this device only. Cloud sync is unavailable.");
+    }
+  } catch (error) {
+    state.persistenceMode = "local";
+    showStatus(`Saved "${instance.lecture}" locally only. Cloud sync is unavailable.`);
+    console.error(error);
+  } finally {
+    bar.disabled = false;
+  }
+}
+
+function createRow(instance) {
+  const lane = document.createElement("div");
+  lane.className = "row-lane";
+
+  const decoration = document.createElement("div");
+  decoration.className = "lane-decoration";
+
+  const bar = document.createElement("button");
+  bar.type = "button";
+  bar.className = "bar";
+  bar.textContent = instance.lecture;
+  bar.title = instance.lecture;
+
+  if (instance.color) {
+    bar.style.setProperty("--bar-color", instance.color);
+  }
+
+  bar.addEventListener("click", () => toggleBar(instance, lane, bar));
+  lane.append(decoration, bar);
+  setDoneVisual(lane, bar, Boolean(state.doneMap[instance.doneKey]));
+  rowsEl.appendChild(lane);
+  return { instance, lane, decoration, bar };
+}
+
+function renderDayDecoration(container, nowMs, width, withLabels) {
+  container.innerHTML = "";
+  const windowStart = nowMs - HALF_WINDOW_MS;
+  const windowEnd = nowMs + HALF_WINDOW_MS;
+  const firstDay = new Date(windowStart);
+  firstDay.setHours(0, 0, 0, 0);
+
+  for (let dayStartMs = firstDay.getTime(); dayStartMs <= windowEnd + MS_PER_DAY; dayStartMs += MS_PER_DAY) {
+    const dayEndMs = dayStartMs + MS_PER_DAY;
+    const left = xForTime(dayStartMs, nowMs, width);
+    const right = xForTime(dayEndMs, nowMs, width);
+    const visibleLeft = Math.max(0, left);
+    const visibleRight = Math.min(width, right);
+    const dayOfWeek = new Date(dayStartMs).getDay();
+
+    if ((dayOfWeek === 0 || dayOfWeek === 6) && visibleRight > visibleLeft) {
+      const weekendBand = document.createElement("div");
+      weekendBand.className = "weekend-band";
+      weekendBand.style.left = `${visibleLeft}px`;
+      weekendBand.style.width = `${visibleRight - visibleLeft}px`;
+      container.appendChild(weekendBand);
+    }
+
+    if (left >= 0 && left <= width) {
+      const dayTick = document.createElement("div");
+      dayTick.className = "day-tick";
+      dayTick.style.left = `${left}px`;
+      container.appendChild(dayTick);
+    }
+
+    if (withLabels) {
+      const middle = (left + right) / 2;
+      if (middle >= -20 && middle <= width + 20) {
+        const label = document.createElement("div");
+        label.className = "tick-label";
+        label.style.left = `${middle}px`;
+        label.textContent = new Date(dayStartMs).toLocaleDateString([], { weekday: "short" });
+        container.appendChild(label);
+      }
+    }
+  }
+}
+
+function renderAxis(nowMs, width) {
+  renderDayDecoration(axisLane, nowMs, width, true);
 }
 
 function renderBars(nowMs) {
   if (!state.rowRefs.length) {
+    axisLane.innerHTML = "";
     return;
   }
 
-  const width = state.rowRefs[0].lane.clientWidth;
+  const width = axisLane.clientWidth || state.rowRefs[0].lane.clientWidth;
   if (!width) {
     return;
   }
 
-  const dayWidth = width / VISIBLE_DAYS;
-  axisLane.style.setProperty("--day-width", `${dayWidth}px`);
-
   renderAxis(nowMs, width);
 
   for (const row of state.rowRefs) {
-    const left = xForTime(row.assignment.releaseMs, nowMs, width);
-    const right = xForTime(row.assignment.deadlineMs, nowMs, width);
+    renderDayDecoration(row.decoration, nowMs, width, false);
+
+    const left = xForTime(row.instance.releaseMs, nowMs, width);
+    const right = xForTime(row.instance.deadlineMs, nowMs, width);
     const clampedLeft = Math.max(0, Math.min(width, left));
     const clampedRight = Math.max(0, Math.min(width, right));
-    const barWidth = Math.max(2, clampedRight - clampedLeft);
+    const barWidth = Math.max(10, clampedRight - clampedLeft);
 
-    row.lane.style.setProperty("--day-width", `${dayWidth}px`);
     row.bar.style.left = `${clampedLeft}px`;
     row.bar.style.width = `${barWidth}px`;
-    row.bar.style.opacity = right < 0 || left > width ? "0.25" : "1";
+    row.bar.style.opacity = right < 0 || left > width ? "0.35" : "1";
   }
+}
+
+function sameInstanceList(a, b) {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i += 1) {
+    if (
+      a[i].instanceId !== b[i].instanceId ||
+      a[i].releaseMs !== b[i].releaseMs ||
+      a[i].deadlineMs !== b[i].deadlineMs
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function buildRows() {
+  rowsEl.innerHTML = "";
+  state.rowRefs = state.instances.map(createRow);
+}
+
+function refreshInstances(nowMs, force = false) {
+  if (!force && nowMs - state.lastInstanceBuildMs < INSTANCE_REFRESH_MS) {
+    return;
+  }
+
+  const nextInstances = expandAssignmentsForWindow(state.assignments, nowMs);
+  if (!sameInstanceList(nextInstances, state.instances)) {
+    state.instances = nextInstances;
+    buildRows();
+  }
+
+  state.lastInstanceBuildMs = nowMs;
 }
 
 async function fetchAssignments() {
@@ -257,13 +348,14 @@ async function saveDoneState(id, done) {
   writeLocalDoneMap(state.doneMap);
 }
 
-function buildRows() {
-  rowsEl.innerHTML = "";
-  state.rowRefs = state.assignments.map(createRow);
-}
-
 function startTicker() {
-  const tick = () => renderBars(Date.now());
+  const tick = () => {
+    const nowMs = Date.now();
+    refreshInstances(nowMs);
+    renderBars(nowMs);
+  };
+
+  refreshInstances(Date.now(), true);
   tick();
   setInterval(tick, TICK_MS);
   window.addEventListener("resize", tick);
@@ -273,13 +365,11 @@ async function init() {
   showStatus("Loading assignments...");
 
   try {
-    const assignments = await fetchAssignments();
-    state.assignments = assignments;
+    state.assignments = await fetchAssignments();
     state.doneMap = readLocalDoneMap();
 
     try {
-      const remoteDoneMap = await fetchDoneMap();
-      state.doneMap = remoteDoneMap;
+      state.doneMap = await fetchDoneMap();
       writeLocalDoneMap(state.doneMap);
       state.persistenceMode = "remote";
       showStatus("");
@@ -297,7 +387,10 @@ async function init() {
       console.error(error);
     }
 
-    buildRows();
+    if (!state.assignments.length) {
+      showStatus("No assignments found in /config/homework.json.");
+    }
+
     startTicker();
   } catch (error) {
     showStatus("Load failed. Verify /config/homework.json and KV binding.");

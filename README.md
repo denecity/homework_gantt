@@ -4,7 +4,7 @@ Config-driven homework tracker with:
 
 - real-time scrolling 10-day Gantt window (now centered)
 - release-to-deadline bars
-- checkbox to mark assignments done
+- click bars to toggle done/undone
 - persistent done state across devices via Cloudflare KV
 
 ## Project structure
@@ -29,10 +29,11 @@ Update `public/config/homework.json`:
   "assignments": [
     {
       "id": "unique-id",
-      "title": "Homework title",
+      "lecture": "Lecture name",
       "release": "2026-02-24T09:00:00",
       "deadline": "2026-03-01T23:59:00",
-      "color": "#0f6c7a"
+      "repeatWeekly": false,
+      "color": "#0F6C7A"
     }
   ]
 }
@@ -41,6 +42,9 @@ Update `public/config/homework.json`:
 Notes:
 
 - `id` must stay stable so done state persists.
+- `lecture` is printed directly on the bar.
+- `repeatWeekly` controls whether the assignment repeats every 7 days.
+- `color` accepts hex only (`#RGB`, `#RRGGBB`, `#RRGGBBAA`).
 - Date-time strings are interpreted in browser local time when no timezone suffix is provided.
 
 ## Cloudflare Pages setup (Git-based)
