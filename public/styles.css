@@ -126,6 +126,8 @@ body {
   position: absolute;
   top: 3px;
   bottom: 3px;
+  display: flex;
+  align-items: center;
   border-radius: 6px;
   background: var(--bar-color, var(--bar));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
@@ -146,6 +148,24 @@ body {
 .bar:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.bar-label {
+  display: block;
+  width: 100%;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-link {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.bar-link:hover {
+  text-decoration-thickness: 2px;
 }
 
 .bar.done {

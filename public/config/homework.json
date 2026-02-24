@@ -1,36 +1,58 @@
 {
   "assignments": [
     {
-      "id": "algo-week-01",
-      "lecture": "Algorithms",
-      "release": "2026-02-21T09:00:00",
-      "deadline": "2026-02-27T23:59:00",
+      "id": "Quantum Mechanics",
+      "lecture": "Quantum Mechanics",
+      "release": "2026-02-23T12:00:00",
+      "deadline": "2026-02-27T12:00:00",
       "repeatWeekly": true,
-      "color": "#0F6C7A"
+      "color": "#3A86FF",
+      "link": "https://example.com/homework/quantum-mechanics"
     },
     {
-      "id": "db-week-01",
-      "lecture": "Databases",
-      "release": "2026-02-22T10:00:00",
-      "deadline": "2026-02-28T23:59:00",
+      "id": "Particle Physics",
+      "lecture": "Particle Physics",
+      "release": "2026-02-17T12:00:00",
+      "deadline": "2026-02-23T12:00:00",
       "repeatWeekly": true,
-      "color": "#3F7F55"
+      "color": "#FF006E",
+      "link": "https://example.com/homework/particle-physics"
     },
     {
-      "id": "ml-week-01",
-      "lecture": "Machine Learning",
-      "release": "2026-02-24T08:30:00",
-      "deadline": "2026-03-01T23:00:00",
-      "repeatWeekly": false,
-      "color": "#25589B"
+      "id": "Quantum Electronics",
+      "lecture": "Quantum Electronics",
+      "release": "2026-02-19T12:00:00",
+      "deadline": "2026-02-23T12:00:00",
+      "repeatWeekly": true,
+      "color": "#8338EC",
+      "link": "https://example.com/homework/quantum-electronics"
     },
     {
-      "id": "os-week-01",
-      "lecture": "Operating Systems",
-      "release": "2026-02-25T07:00:00",
-      "deadline": "2026-03-02T20:00:00",
-      "repeatWeekly": false,
-      "color": "#96541F"
+      "id": "Optimization",
+      "lecture": "Optimization",
+      "release": "2026-02-20T12:00:00",
+      "deadline": "2026-02-26T12:00:00",
+      "repeatWeekly": true,
+      "color": "#FB5607",
+      "link": "https://example.com/homework/optimization"
+    },
+    {
+      "id": "Electronics",
+      "lecture": "Electronics",
+      "release": "2026-02-20T12:00:00",
+      "deadline": "2026-02-26T12:00:00",
+      "repeatWeekly": true,
+      "color": "#2A9D8F",
+      "link": "https://example.com/homework/electronics"
+    },
+    {
+      "id": "Geology",
+      "lecture": "Geology",
+      "release": "2026-02-23T12:00:00",
+      "deadline": "2026-02-26T12:00:00",
+      "repeatWeekly": true,
+      "color": "#FFBE0B",
+      "link": "https://example.com/homework/geology"
     }
   ]
 }

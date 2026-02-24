@@ -54,6 +54,24 @@ function sanitizeHexColor(value) {
   return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color) ? color : null;
 }
 
+function sanitizeAssignmentLink(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const candidate = value.trim();
+  if (!candidate) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(candidate, window.location.href);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseAssignments(raw) {
   if (!Array.isArray(raw)) {
     return [];
@@ -78,6 +96,7 @@ function parseAssignments(raw) {
         deadlineMs: endMs,
         repeatWeekly: Boolean(item.repeatWeekly || item.weeklyRepeat),
         color: sanitizeHexColor(item.color),
+        link: sanitizeAssignmentLink(item.link),
       };
     })
     .filter(Boolean)
@@ -102,6 +121,7 @@ function buildInstance(assignment, releaseMs, deadlineMs, repeatIndex) {
     doneKey,
     lecture: assignment.lecture,
     color: assignment.color,
+    link: assignment.link,
     releaseMs,
     deadlineMs,
   };
@@ -148,8 +168,13 @@ function setDoneVisual(lane, bar, done) {
 }
 
 async function toggleBar(instance, lane, bar) {
+  if (bar.dataset.busy === "true") {
+    return;
+  }
+
   const done = !Boolean(state.doneMap[instance.doneKey]);
-  bar.disabled = true;
+  bar.dataset.busy = "true";
+  bar.setAttribute("aria-disabled", "true");
   state.doneMap[instance.doneKey] = done;
   writeLocalDoneMap(state.doneMap);
   setDoneVisual(lane, bar, done);
@@ -166,7 +191,8 @@ async function toggleBar(instance, lane, bar) {
     showStatus(`Saved "${instance.lecture}" locally only. Cloud sync is unavailable.`);
     console.error(error);
   } finally {
-    bar.disabled = false;
+    delete bar.dataset.busy;
+    bar.removeAttribute("aria-disabled");
   }
 }
 
@@ -177,17 +203,42 @@ function createRow(instance) {
   const decoration = document.createElement("div");
   decoration.className = "lane-decoration";
 
-  const bar = document.createElement("button");
-  bar.type = "button";
+  const bar = document.createElement("div");
   bar.className = "bar";
-  bar.textContent = instance.lecture;
-  bar.title = instance.lecture;
+  bar.setAttribute("role", "button");
+  bar.tabIndex = 0;
+  bar.title = instance.link ? `${instance.lecture}\nClick text to open link` : instance.lecture;
+
+  const label = instance.link ? document.createElement("a") : document.createElement("span");
+  label.className = instance.link ? "bar-label bar-link" : "bar-label";
+  label.textContent = instance.lecture;
+
+  if (instance.link) {
+    label.href = instance.link;
+    label.target = "_blank";
+    label.rel = "noopener noreferrer";
+    label.title = instance.link;
+    label.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+  }
 
   if (instance.color) {
     bar.style.setProperty("--bar-color", instance.color);
   }
 
+  bar.appendChild(label);
   bar.addEventListener("click", () => toggleBar(instance, lane, bar));
+  bar.addEventListener("keydown", (event) => {
+    if (event.target !== bar) {
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleBar(instance, lane, bar);
+    }
+  });
   lane.append(decoration, bar);
   setDoneVisual(lane, bar, Boolean(state.doneMap[instance.doneKey]));
   rowsEl.appendChild(lane);
