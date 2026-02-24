@@ -1,12 +1,12 @@
 :root {
-  --bg: #f6f3ea;
-  --panel: #fffdf8;
-  --ink: #182024;
-  --muted: #5b646a;
-  --line: #d0c8b6;
-  --bar: #1b6a73;
-  --bar-done: #8a8d90;
-  --accent: #c9a14a;
+  --bg: #0d1117;
+  --panel: #151b23;
+  --ink: #e6edf3;
+  --muted: #9aa7b6;
+  --line: #2b3643;
+  --bar: #23889a;
+  --bar-done: #68717a;
+  --accent: #f0b45c;
   --row-height: 52px;
 }
 
@@ -19,8 +19,8 @@ body {
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at 8% 12%, #f4e3b9 0%, transparent 24%),
-    radial-gradient(circle at 86% 22%, #d0e8dc 0%, transparent 27%),
+    radial-gradient(circle at 8% 12%, #1c2530 0%, transparent 28%),
+    radial-gradient(circle at 86% 22%, #18242b 0%, transparent 30%),
     var(--bg);
 }
 
@@ -36,7 +36,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 10px;
-  box-shadow: 0 8px 22px rgba(11, 16, 22, 0.08);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.42);
 }
 
 .axis-lane {
@@ -45,7 +45,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
-  background-color: #f9f8f2;
+  background-color: #111821;
   margin-bottom: 8px;
 }
 
@@ -57,7 +57,7 @@ body {
   left: 50%;
   width: 2px;
   background: var(--accent);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
   z-index: 4;
 }
 
@@ -71,7 +71,7 @@ body {
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(24, 32, 36, 0.14);
+  background: rgba(230, 237, 243, 0.18);
   z-index: 1;
 }
 
@@ -79,7 +79,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(24, 32, 36, 0.08);
+  background: rgba(255, 255, 255, 0.07);
   z-index: 0;
 }
 
@@ -89,7 +89,7 @@ body {
   transform: translateX(-50%);
   color: var(--muted);
   font-size: 0.72rem;
-  background: rgba(255, 253, 248, 0.84);
+  background: rgba(21, 27, 35, 0.92);
   padding: 0 4px;
   border-radius: 6px;
   white-space: nowrap;
@@ -98,11 +98,11 @@ body {
 
 .row-lane {
   min-height: var(--row-height);
-  border: 1px solid #e3dbc8;
+  border: 1px solid #2e3a47;
   border-radius: 6px;
   position: relative;
   overflow: hidden;
-  background: #f9f8f2;
+  background: #111821;
 }
 
 .row-lane::after {
@@ -128,10 +128,10 @@ body {
   bottom: 3px;
   border-radius: 6px;
   background: var(--bar-color, var(--bar));
-  box-shadow: 0 4px 10px rgba(9, 21, 23, 0.22);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
   min-width: 10px;
   border: none;
-  color: #f9f9f9;
+  color: #f5f8fb;
   font-size: 0.86rem;
   font-weight: 600;
   padding: 0 10px;
@@ -144,7 +144,7 @@ body {
 }
 
 .bar:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -155,7 +155,7 @@ body {
 .status {
   min-height: 22px;
   margin: 8px 4px 0;
-  color: #7a2323;
+  color: #f3b266;
   font-size: 0.9rem;
 }
 
