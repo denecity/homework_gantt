@@ -1,0 +1,32 @@
+{
+  "assignments": [
+    {
+      "id": "algo-week-01",
+      "title": "Algorithms - Week 1 Problem Set",
+      "release": "2026-02-21T09:00:00",
+      "deadline": "2026-02-27T23:59:00",
+      "color": "#0f6c7a"
+    },
+    {
+      "id": "db-week-01",
+      "title": "Databases - Week 1 SQL Homework",
+      "release": "2026-02-22T10:00:00",
+      "deadline": "2026-02-28T23:59:00",
+      "color": "#3f7f55"
+    },
+    {
+      "id": "ml-week-01",
+      "title": "Machine Learning - Week 1 Notebook",
+      "release": "2026-02-24T08:30:00",
+      "deadline": "2026-03-01T23:00:00",
+      "color": "#25589b"
+    },
+    {
+      "id": "os-week-01",
+      "title": "Operating Systems - Week 1 Reading Quiz",
+      "release": "2026-02-25T07:00:00",
+      "deadline": "2026-03-02T20:00:00",
+      "color": "#96541f"
+    }
+  ]
+}

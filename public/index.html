@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Homework Gantt</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="top">
+        <h1>Homework Timeline</h1>
+        <p>Window: 5 days behind and 5 days ahead of now.</p>
+      </header>
+
+      <section class="chart">
+        <div class="axis-meta">
+          <span>Assignment</span>
+          <small>Done</small>
+        </div>
+        <div class="axis-lane" id="axisLane" aria-hidden="true"></div>
+
+        <div id="rows" class="rows"></div>
+      </section>
+
+      <p id="statusText" class="status" role="status"></p>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
