@@ -7,3 +7,7 @@ yarn-debug.log*
 yarn-error.log*
 .env
 .env.*
+
+.dev.vars*
+!.dev.vars.example
+!.env.example
