@@ -118,6 +118,7 @@ function buildInstance(assignment, releaseMs, deadlineMs, repeatIndex) {
 
   return {
     instanceId: `${assignment.id}@${repeatIndex}`,
+    assignmentId: assignment.id,
     doneKey,
     lecture: assignment.lecture,
     color: assignment.color,
@@ -161,13 +162,12 @@ function expandAssignmentsForWindow(assignments, nowMs) {
   });
 }
 
-function setDoneVisual(lane, bar, done) {
-  lane.classList.toggle("done", done);
+function setDoneVisual(bar, done) {
   bar.classList.toggle("done", done);
   bar.setAttribute("aria-pressed", done ? "true" : "false");
 }
 
-async function toggleBar(instance, lane, bar) {
+async function toggleBar(instance, bar) {
   if (bar.dataset.busy === "true") {
     return;
   }
@@ -177,7 +177,7 @@ async function toggleBar(instance, lane, bar) {
   bar.setAttribute("aria-disabled", "true");
   state.doneMap[instance.doneKey] = done;
   writeLocalDoneMap(state.doneMap);
-  setDoneVisual(lane, bar, done);
+  setDoneVisual(bar, done);
 
   try {
     await saveDoneState(instance.doneKey, done);
@@ -196,13 +196,7 @@ async function toggleBar(instance, lane, bar) {
   }
 }
 
-function createRow(instance) {
-  const lane = document.createElement("div");
-  lane.className = "row-lane";
-
-  const decoration = document.createElement("div");
-  decoration.className = "lane-decoration";
-
+function createBar(instance) {
   const bar = document.createElement("div");
   bar.className = "bar";
   bar.setAttribute("role", "button");
@@ -228,7 +222,7 @@ function createRow(instance) {
   }
 
   bar.appendChild(label);
-  bar.addEventListener("click", () => toggleBar(instance, lane, bar));
+  bar.addEventListener("click", () => toggleBar(instance, bar));
   bar.addEventListener("keydown", (event) => {
     if (event.target !== bar) {
       return;
@@ -236,13 +230,24 @@ function createRow(instance) {
 
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      toggleBar(instance, lane, bar);
+      toggleBar(instance, bar);
     }
   });
-  lane.append(decoration, bar);
-  setDoneVisual(lane, bar, Boolean(state.doneMap[instance.doneKey]));
+
+  setDoneVisual(bar, Boolean(state.doneMap[instance.doneKey]));
+  return { instance, bar };
+}
+
+function createRow(instances) {
+  const lane = document.createElement("div");
+  lane.className = "row-lane";
+
+  const decoration = document.createElement("div");
+  decoration.className = "lane-decoration";
+  const bars = instances.map(createBar);
+  lane.append(decoration, ...bars.map((entry) => entry.bar));
   rowsEl.appendChild(lane);
-  return { instance, lane, decoration, bar };
+  return { lane, decoration, bars };
 }
 
 function renderDayDecoration(container, nowMs, width, withLabels) {
@@ -308,15 +313,17 @@ function renderBars(nowMs) {
   for (const row of state.rowRefs) {
     renderDayDecoration(row.decoration, nowMs, width, false);
 
-    const left = xForTime(row.instance.releaseMs, nowMs, width);
-    const right = xForTime(row.instance.deadlineMs, nowMs, width);
-    const clampedLeft = Math.max(0, Math.min(width, left));
-    const clampedRight = Math.max(0, Math.min(width, right));
-    const barWidth = Math.max(10, clampedRight - clampedLeft);
+    for (const entry of row.bars) {
+      const left = xForTime(entry.instance.releaseMs, nowMs, width);
+      const right = xForTime(entry.instance.deadlineMs, nowMs, width);
+      const clampedLeft = Math.max(0, Math.min(width, left));
+      const clampedRight = Math.max(0, Math.min(width, right));
+      const barWidth = Math.max(10, clampedRight - clampedLeft);
 
-    row.bar.style.left = `${clampedLeft}px`;
-    row.bar.style.width = `${barWidth}px`;
-    row.bar.style.opacity = right < 0 || left > width ? "0.35" : "1";
+      entry.bar.style.left = `${clampedLeft}px`;
+      entry.bar.style.width = `${barWidth}px`;
+      entry.bar.style.opacity = right < 0 || left > width ? "0.35" : "1";
+    }
   }
 }
 
@@ -340,7 +347,25 @@ function sameInstanceList(a, b) {
 
 function buildRows() {
   rowsEl.innerHTML = "";
-  state.rowRefs = state.instances.map(createRow);
+  state.rowRefs = [];
+  const instancesByAssignment = new Map();
+
+  for (const instance of state.instances) {
+    if (!instancesByAssignment.has(instance.assignmentId)) {
+      instancesByAssignment.set(instance.assignmentId, []);
+    }
+    instancesByAssignment.get(instance.assignmentId).push(instance);
+  }
+
+  for (const assignment of state.assignments) {
+    const groupedInstances = instancesByAssignment.get(assignment.id);
+    if (!groupedInstances || !groupedInstances.length) {
+      continue;
+    }
+
+    groupedInstances.sort((a, b) => a.releaseMs - b.releaseMs);
+    state.rowRefs.push(createRow(groupedInstances));
+  }
 }
 
 function refreshInstances(nowMs, force = false) {
