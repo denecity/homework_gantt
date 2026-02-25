@@ -12,8 +12,8 @@
     {
       "id": "Particle Physics",
       "lecture": "Particle Physics",
-      "release": "2026-02-17T12:00:00",
-      "deadline": "2026-02-23T12:00:00",
+      "release": "2026-02-18T0:00:00",
+      "deadline": "2026-02-24T12:00:00",
       "repeatWeekly": true,
       "color": "#FF006E",
       "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=27528"
@@ -21,8 +21,8 @@
     {
       "id": "Quantum Electronics",
       "lecture": "Quantum Electronics",
-      "release": "2026-02-19T12:00:00",
-      "deadline": "2026-02-23T12:00:00",
+      "release": "2026-02-20T12:00:00",
+      "deadline": "2026-02-26T16:00:00",
       "repeatWeekly": true,
       "color": "#8338EC",
       "link": "https://moodle-app2.let.ethz.ch/course/view.php?id=27676"
