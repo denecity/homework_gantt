@@ -7,3 +7,8 @@ yarn-debug.log*
 yarn-error.log*
 .env
 .env.*
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

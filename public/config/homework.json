@@ -3,6 +3,7 @@
     {
       "id": "Quantum Mechanics",
       "lecture": "Quantum Mechanics",
+      "group": "Physics",
       "release": "2026-02-23T12:00:00",
       "deadline": "2026-02-27T12:00:00",
       "repeatWeekly": true,
@@ -12,6 +13,7 @@
     {
       "id": "Particle Physics",
       "lecture": "Particle Physics",
+      "group": "Physics",
       "release": "2026-02-18T12:00:00",
       "deadline": "2026-02-24T12:00:00",
       "repeatWeekly": true,
@@ -21,6 +23,7 @@
     {
       "id": "Quantum Electronics",
       "lecture": "Quantum Electronics",
+      "group": "Engineering",
       "release": "2026-02-20T12:00:00",
       "deadline": "2026-02-26T16:00:00",
       "repeatWeekly": true,
@@ -30,6 +33,7 @@
     {
       "id": "Optimization",
       "lecture": "Optimization",
+      "group": "Math",
       "release": "2026-02-20T12:00:00",
       "deadline": "2026-02-26T12:00:00",
       "repeatWeekly": true,
@@ -39,6 +43,7 @@
     {
       "id": "Electronics",
       "lecture": "Electronics",
+      "group": "Engineering",
       "release": "2026-02-20T12:00:00",
       "deadline": "2026-02-26T12:00:00",
       "repeatWeekly": true,

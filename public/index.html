@@ -1,20 +1,142 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <title>Homework Gantt</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="description" content="Homework tracker with Gantt timeline" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>" />
   </head>
   <body>
+
+    <!-- skeleton -->
+    <div class="skeleton" id="skeleton" role="status" aria-label="Loading">
+      <div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div>
+      <div class="sk-row"></div><div class="sk-row"></div>
+    </div>
+
     <main class="layout">
-      <section class="chart">
+      <!-- controls bar -->
+      <div class="controls" id="controls">
+        <input
+          type="search"
+          id="searchInput"
+          class="search-input"
+          placeholder="Filter courses…  (/)"
+          autocomplete="off"
+        />
+        <div class="nav-group">
+          <button type="button" class="nav-btn" id="panLeftBtn" aria-label="Scroll left" title="Scroll left (←)">◀</button>
+          <input type="date" id="dateJumpInput" class="date-jump" title="Jump to date" aria-label="Jump to date" />
+          <button type="button" class="nav-btn today-btn" id="todayBtn" title="Jump to today (T)">Today</button>
+          <button type="button" class="nav-btn" id="panRightBtn" aria-label="Scroll right" title="Scroll right (→)">▶</button>
+        </div>
+        <div class="zoom-group" role="radiogroup" aria-label="Time window">
+          <button type="button" class="zoom-btn" data-days="5" role="radio" aria-checked="false">5d</button>
+          <button type="button" class="zoom-btn active" data-days="10" role="radio" aria-checked="true">10d</button>
+          <button type="button" class="zoom-btn" data-days="14" role="radio" aria-checked="false">14d</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="action-group">
+          <button type="button" class="action-btn" id="markAllDoneBtn" title="Mark all visible as done (Ctrl+Shift+D)">✓ All</button>
+          <button type="button" class="action-btn" id="markAllUndoneBtn" title="Mark all visible as undone (Ctrl+Shift+U)">✗ All</button>
+          <button type="button" class="action-btn" id="exportBtn" title="Export done state as JSON">Export</button>
+          <button type="button" class="action-btn" id="icalExportBtn" title="Download ICS calendar file">📅 ICS</button>
+          <button type="button" class="action-btn" id="importBtn" title="Import done state from JSON">Import</button>
+          <input type="file" id="importFileInput" hidden accept=".json" />
+          <button type="button" class="action-btn" id="themeToggle" title="Toggle theme">🌙</button>
+          <button type="button" class="action-btn" id="helpBtn" title="Keyboard shortcuts (?)">?</button>
+        </div>
+        <div class="summary" id="summary" aria-live="polite"></div>
+      </div>
+
+      <!-- chart -->
+      <section class="chart" id="chart" tabindex="0" role="region" aria-label="Homework timeline">
         <div class="axis-lane" id="axisLane" aria-hidden="true"></div>
         <div id="rows" class="rows"></div>
       </section>
 
-      <p id="statusText" class="status" role="status"></p>
+      <!-- status bar -->
+      <div class="status-row">
+        <p id="statusText" class="status" role="status"></p>
+        <button type="button" id="retryBtn" class="retry-btn hidden">Retry</button>
+      </div>
+
+      <!-- shortcut hints -->
+      <div class="shortcut-hints" id="shortcutHints" aria-label="Keyboard shortcuts">
+        <kbd>/</kbd> search
+        <kbd>←</kbd><kbd>→</kbd> pan
+        <kbd>T</kbd> today
+        <kbd>?</kbd> help
+        <kbd>Ctrl+Z</kbd> undo
+        <kbd>Esc</kbd> close
+      </div>
     </main>
+
+    <!-- help modal -->
+    <div class="modal" id="helpModal" role="dialog" aria-label="Keyboard shortcuts" aria-hidden="true">
+      <div class="modal-panel">
+        <button class="modal-close" id="helpCloseBtn" aria-label="Close">&times;</button>
+        <h2>Keyboard Shortcuts</h2>
+        <table class="shortcut-table">
+          <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Pan timeline by 1 day (chart focused)</td></tr>
+          <tr><td><kbd>Shift</kbd> + scroll</td><td>Pan timeline</td></tr>
+          <tr><td>Drag chart</td><td>Pan timeline with momentum</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Jump to today</td></tr>
+          <tr><td><kbd>/</kbd> or <kbd>Ctrl+K</kbd></td><td>Focus search</td></tr>
+          <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo last toggle</td></tr>
+          <tr><td><kbd>Ctrl+Shift+Z</kbd></td><td>Redo</td></tr>
+          <tr><td><kbd>Ctrl+Shift+D</kbd></td><td>Mark all visible done</td></tr>
+          <tr><td><kbd>Ctrl+Shift+U</kbd></td><td>Mark all visible undone</td></tr>
+          <tr><td><kbd>Ctrl+Shift+G</kbd></td><td>Toggle group collapse</td></tr>
+          <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd></td><td>Toggle bar (when focused)</td></tr>
+          <tr><td><kbd>Tab</kbd></td><td>Navigate between bars</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close modal</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show/hide this help</td></tr>
+        </table>
+        <h3>Mouse / Touch</h3>
+        <table class="shortcut-table">
+          <tr><td>Click bar</td><td>Toggle done/undone</td></tr>
+          <tr><td>Click bar text</td><td>Open assignment link</td></tr>
+          <tr><td>Shift+Click bars</td><td>Select range for bulk toggle</td></tr>
+          <tr><td>Pinch</td><td>Zoom in/out</td></tr>
+          <tr><td>Right-click bar</td><td>Copy link or mark done</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- add assignment modal -->
+    <div class="modal" id="addModal" role="dialog" aria-label="Add assignment" aria-hidden="true">
+      <div class="modal-panel">
+        <button class="modal-close" id="addCancelBtn" aria-label="Close">&times;</button>
+        <h2>Quick Add Assignment</h2>
+        <form id="addForm" class="add-form">
+          <label>ID <input type="text" name="addId" required placeholder="unique-id" /></label>
+          <label>Name <input type="text" name="addName" required placeholder="Homework 1" /></label>
+          <label>Release <input type="datetime-local" name="addRelease" required /></label>
+          <label>Deadline <input type="datetime-local" name="addDeadline" required /></label>
+          <label>Repeat
+            <select name="addRepeat">
+              <option value="none">None</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          <label>Group <input type="text" name="addGroup" placeholder="Physics" /></label>
+          <label>Color <input type="color" name="addColor" value="#3A86FF" /></label>
+          <label>Link <input type="url" name="addLink" placeholder="https://..." /></label>
+          <button type="submit" class="action-btn primary">Add</button>
+        </form>
+      </div>
+    </div>
+
     <script src="/app.js" defer></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(function(){});
+      }
+    </script>
   </body>
 </html>
