@@ -54,7 +54,7 @@ const skeletonEl = document.getElementById("skeleton");
 const markAllDoneBtn = document.getElementById("markAllDoneBtn");
 const markAllUndoneBtn = document.getElementById("markAllUndoneBtn");
 const dateJumpInput = document.getElementById("dateJumpInput");
-const icsExportBtn = document.getElementById("icsExportBtn");
+const icsExportBtn = document.getElementById("icalExportBtn");
 let contextMenuEl = null;
 
 /* ── Global tooltip ── */
@@ -255,7 +255,7 @@ function markAllVisible(toDone) {
     bars.forEach((bar) => {
       const inst = bar._instance;
       if (!inst) return;
-      const doneKey = inst.id + "|" + inst.doneKeySuffix;
+      const doneKey = inst.doneKey;
       if (state.doneMap[doneKey] !== toDone) {
         state.doneMap[doneKey] = toDone;
         setDoneVisual(bar, toDone);
@@ -348,17 +348,16 @@ function exportICS() {
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
   ];
-  state.flatInstances.forEach((inst) => {
-    const doneKey = inst.id + "|" + inst.doneKeySuffix;
-    if (state.doneMap[doneKey]) return; // skip done
+  state.instances.forEach((inst) => {
+    if (state.doneMap[inst.doneKey]) return; // skip done
     const dtStart = toICSDate(new Date(inst.releaseMs));
     const dtEnd = toICSDate(new Date(inst.deadlineMs));
-    const uid = inst.id + "@gantt";
-    const summary = `${inst.courseCode}: ${inst.title}`;
+    const uid = inst.instanceId + "@gantt";
+    const summary = icsEscapeText(inst.group ? `${inst.group}: ${inst.lecture}` : inst.lecture);
     lines.push(
       "BEGIN:VEVENT",
-      `DTSTART;VALUE=DATE:${dtStart}`,
-      `DTEND;VALUE=DATE:${dtEnd}`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
       `SUMMARY:${summary}`,
       `UID:${uid}`,
       `DTSTAMP:${toICSDate(now)}`,
@@ -370,8 +369,16 @@ function exportICS() {
   downloadBlob(blob, `homework-${toICSDate(now)}.ics`);
 }
 
+function icsEscapeText(value) {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+
 function toICSDate(d) {
-  return d.toISOString().replace(/[-:]/g, "").replace(/\..+/, "");
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
 function downloadBlob(blob, filename) {
@@ -384,11 +391,11 @@ function downloadBlob(blob, filename) {
 }
 
 /* ── Right-click context menu ── */
-function showContextMenu(e, instance) {
+function showContextMenu(e, instance, bar) {
   hideContextMenu();
   contextMenuEl = document.createElement("div");
   contextMenuEl.className = "context-menu open";
-  const doneKey = instance.id + "|" + instance.doneKeySuffix;
+  const doneKey = instance.doneKey;
   const isDone = !!state.doneMap[doneKey];
   contextMenuEl.innerHTML = [
     `<div class="context-menu-item" data-action="toggle">${isDone ? "Mark Undone" : "Mark Done"}</div>`,
@@ -399,7 +406,6 @@ function showContextMenu(e, instance) {
   contextMenuEl.addEventListener("click", (ev) => {
     const action = ev.target.dataset.action;
     if (action === "toggle") {
-      const bar = document.querySelector(`.bar[data-id="${CSS.escape(instance.id)}"]`);
       if (bar) toggleBar(instance, bar);
     } else if (action === "markall") {
       markAllVisible(!isDone);
@@ -442,8 +448,8 @@ function hideContextMenu() {
 /* ── Shift+click range toggle ── */
 function rangeToggle(firstId, secondId) {
   const bars = [...chartEl.querySelectorAll(".bar")];
-  const idx1 = bars.findIndex((b) => b._instance?.id === firstId);
-  const idx2 = bars.findIndex((b) => b._instance?.id === secondId);
+  const idx1 = bars.findIndex((b) => b._instance?.instanceId === firstId);
+  const idx2 = bars.findIndex((b) => b._instance?.instanceId === secondId);
   if (idx1 < 0 || idx2 < 0) return;
   const [lo, hi] = [Math.min(idx1, idx2), Math.max(idx1, idx2)];
   const targetDone = !state.doneMap[bars[lo]._instance.doneKey];
@@ -502,12 +508,11 @@ function handlePinchEnd() {
 
 /* ── Completion stats ── */
 function trackCompletionStats() {
-  const total = state.flatInstances.length;
+  const total = state.instances.length;
   if (!total) return;
   let done = 0;
-  state.flatInstances.forEach((inst) => {
-    const dk = inst.id + "|" + inst.doneKeySuffix;
-    if (state.doneMap[dk]) done++;
+  state.instances.forEach((inst) => {
+    if (state.doneMap[inst.doneKey]) done++;
   });
   const today = new Date().toISOString().slice(0, 10);
   const stats = readLocal(LOCAL_STATS_KEY, {});
@@ -732,8 +737,8 @@ async function toggleBar(instance, bar) {
 
   // Checkmark animation
   if (done) {
-    bar.classList.add("just-done");
-    bar.addEventListener("animationend", () => bar.classList.remove("just-done"), { once: true });
+    bar.classList.add("done-flash");
+    bar.addEventListener("animationend", () => bar.classList.remove("done-flash"), { once: true });
   }
 
   try {
@@ -815,6 +820,7 @@ function createBar(instance, stackLevel, maxLevel) {
     if (cls) bar.classList.add(cls);
   }
 
+  bar._instance = instance;
   return { instance, bar };
 }
 
@@ -1036,14 +1042,40 @@ function buildRows() {
     return a.releaseMs - b.releaseMs;
   });
 
+  let lastGroupHeader = null;
   for (const assignment of sortedAssignments) {
     const grouped = instancesByAssignment.get(assignment.id);
     if (!grouped || !grouped.length) continue;
     grouped.sort((a, b) => a.releaseMs - b.releaseMs);
+
+    /* emit a clickable group header when entering a new (non-null) group */
+    if (assignment.group && assignment.group !== lastGroupHeader) {
+      rowsEl.appendChild(createGroupHeader(assignment.group));
+      lastGroupHeader = assignment.group;
+    }
+
     state.rowRefs.push(createRow(grouped));
   }
 
+  refreshAllGroupsCollapse();
   updateSummary();
+}
+
+function createGroupHeader(groupName) {
+  const header = document.createElement("div");
+  header.className = "group-header";
+  header.dataset.group = groupName;
+
+  const arrow = document.createElement("span");
+  arrow.className = "group-header-arrow";
+  arrow.textContent = "▾";
+
+  const name = document.createElement("span");
+  name.className = "group-header-name";
+  name.textContent = groupName;
+
+  header.append(arrow, name);
+  return header;
 }
 
 function refreshInstances(centerMs, force = false) {
@@ -1798,7 +1830,7 @@ async function init() {
     const bar = e.target.closest(".bar");
     if (bar && bar._instance) {
       e.preventDefault();
-      showContextMenu(e, bar._instance);
+      showContextMenu(e, bar._instance, bar);
     }
   });
 
@@ -1822,12 +1854,13 @@ async function init() {
     if (!e.shiftKey) return;
     const bar = e.target.closest(".bar");
     if (!bar || !bar._instance) return;
-    if (state._lastShiftClick && state._lastShiftClick !== bar._instance.id) {
+    const instanceId = bar._instance.instanceId;
+    if (state._lastShiftClick && state._lastShiftClick !== instanceId) {
       e.preventDefault();
       // toggle all bars between last shift click and this one
-      rangeToggle(state._lastShiftClick, bar._instance.id);
+      rangeToggle(state._lastShiftClick, instanceId);
     }
-    state._lastShiftClick = bar._instance.id;
+    state._lastShiftClick = instanceId;
   });
 
   /* keyboard panning on chart */
