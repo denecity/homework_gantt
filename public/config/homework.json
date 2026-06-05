@@ -23,7 +23,7 @@
     {
       "id": "Quantum Electronics",
       "lecture": "Quantum Electronics",
-      "group": "Engineering",
+      "group": "Physics",
       "release": "2026-02-20T12:00:00",
       "deadline": "2026-02-26T16:00:00",
       "repeatWeekly": true,
@@ -33,7 +33,7 @@
     {
       "id": "Optimization",
       "lecture": "Optimization",
-      "group": "Math",
+      "group": "Engineering",
       "release": "2026-02-20T12:00:00",
       "deadline": "2026-02-26T12:00:00",
       "repeatWeekly": true,
