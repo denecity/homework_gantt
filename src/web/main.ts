@@ -2,9 +2,13 @@ import { isOverdue, type TimelineItem } from "../shared/expand";
 import type { AppState } from "../shared/schema";
 import { daysBetween, dateKey } from "../shared/time";
 import { api } from "./api";
+import { MobileTimeline } from "./mobile";
 import { Panel } from "./panel";
+import { registerServiceWorker, watchInstallPrompt } from "./push";
 import { Timeline } from "./timeline";
-import { $, fmtLongDay, fmtSpan, h, toast } from "./util";
+import { DEFAULT_SETTINGS } from "../shared/settings-defaults";
+import { $, fmtDay, fmtLongDay, fmtSpan, fmtTime, h, setUrgencyThresholds, toast, urgencyOf } from "./util";
+import type { TimelineCallbacks, TimelineView } from "./view";
 
 const TICK_MS = 15_000;
 const POLL_MS = 15_000;
@@ -18,9 +22,11 @@ let state: AppState = {
   series: [],
   assignments: [],
   review_done: [],
+  notification_rules: [],
+  settings: DEFAULT_SETTINGS,
 };
 
-const timeline = new Timeline({
+const callbacks: TimelineCallbacks = {
   open: (item) => panel.openItem(item),
   toggle: (item) => void toggle(item),
   moveDeadline: (item, dueMs) =>
@@ -32,11 +38,37 @@ const timeline = new Timeline({
     void mutate(() => api.reorderCourses(ids));
   },
   openMarker: (marker) => panel.openMarker(marker),
-});
+};
+
+/** Which layout the current screen width should use, per the stored settings. */
+function wantsLane(): boolean {
+  const s = state.settings;
+  return window.innerWidth <= s.phone_breakpoint_px ? s.phone_layout === "lane" : s.desktop_layout === "lane";
+}
+
+const makeView = (lane: boolean): TimelineView =>
+  lane ? new MobileTimeline(callbacks, state.settings) : new Timeline(callbacks, state.settings);
+
+let laneMode = wantsLane();
+let view: TimelineView = makeView(laneMode);
+
+/** Rebuilds the timeline when the layout setting or the screen width calls for the other one. */
+function ensureView() {
+  const lane = wantsLane();
+  if (lane === laneMode) return false;
+  laneMode = lane;
+  const keepTime = Date.now();
+  view.destroy();
+  view = makeView(lane);
+  view.render(state);
+  view.tick(keepTime);
+  view.scrollToTime(keepTime, 0.3);
+  return true;
+}
 
 const panel = new Panel({
   state: () => state,
-  items: () => timeline.items,
+  items: () => view.items,
   toggle,
   mutate,
 });
@@ -44,8 +76,17 @@ const panel = new Panel({
 // ---- state flow -----------------------------------------------------------------------------
 
 function apply(next: AppState) {
+  const before = state.settings;
   state = next;
-  timeline.render(state);
+  setUrgencyThresholds(state.settings.soon_hours, state.settings.urgent_hours);
+  document.body.classList.toggle("no-fill", !state.settings.show_progress_fill);
+  // A settings change can swap the layout outright; ensureView then renders for us.
+  if (before !== state.settings && ensureView()) {
+    renderChrome(Date.now());
+    panel.refresh();
+    return;
+  }
+  view.render(state);
   renderChrome(Date.now());
   panel.refresh();
 }
@@ -96,6 +137,7 @@ function renderChrome(now: number) {
     $("semesterMeta").textContent = fmtLongDay(now);
   }
 
+  if (!state.settings.show_next_up) $("nextUp").hidden = true;
   const empty = $("empty");
   empty.hidden = state.courses.length > 0;
   if (!empty.hidden) {
@@ -106,7 +148,11 @@ function renderChrome(now: number) {
     );
   }
 
-  const overdue = timeline.items.filter((i) => isOverdue(i, now)).sort((a, b) => a.endMs - b.endMs);
+  if (state.settings.show_next_up) renderNextUp(now);
+
+  const overdue = state.settings.show_overdue_shelf
+    ? view.items.filter((i) => isOverdue(i, now, state.settings.review_grace_days)).sort((a, b) => a.endMs - b.endMs)
+    : [];
   const shelf = $("shelf");
   shelf.hidden = overdue.length === 0;
   if (!overdue.length) return;
@@ -128,7 +174,7 @@ function renderChrome(now: number) {
               class: "chip-main",
               type: "button",
               onclick: () => {
-                timeline.select(item.id);
+                view.select(item.id);
                 panel.openItem(item);
               },
             },
@@ -142,12 +188,55 @@ function renderChrome(now: number) {
   );
 }
 
+/** The single most urgent open item, pinned above the timeline. */
+function renderNextUp(now: number) {
+  const next = view.items
+    .filter((i) => !i.done && i.endMs >= now)
+    .sort((a, b) => a.endMs - b.endMs)[0];
+  const el = $("nextUp");
+  el.hidden = !next;
+  if (!next) return;
+
+  const course = state.courses.find((c) => c.id === next.course_id);
+  const u = urgencyOf(next.startMs, next.endMs, false, now);
+  el.dataset.u = u;
+  el.style.setProperty("--c", course?.color ?? "#888");
+  el.replaceChildren(
+    h("div", { class: "nu-cd" }, h("b", {}, fmtSpan(next.endMs - now)), h("small", {}, "left")),
+    h(
+      "button",
+      {
+        class: "nu-main",
+        type: "button",
+        onclick: () => {
+          view.select(next.id);
+          panel.openItem(next);
+        },
+      },
+      h(
+        "span",
+        { class: "nu-title" },
+        h("b", {}, course?.short ?? next.course_id),
+        " · ",
+        next.kind === "review" ? next.title.replace("Review lecture", "Review") : next.title,
+      ),
+      h("span", { class: "nu-sub" }, `due ${fmtDay(next.endMs)} ${fmtTime(next.endMs)}`),
+    ),
+    h("button", {
+      class: "nu-chk",
+      type: "button",
+      "aria-label": `Mark ${next.title} done`,
+      onclick: () => void toggle(next),
+    }),
+  );
+}
+
 // ---- clock & live updates ---------------------------------------------------------------------------
 
 let lastChromeMinute = -1;
 function tick() {
   const now = Date.now();
-  timeline.tick(now);
+  view.tick(now);
   const minute = Math.floor(now / 60_000);
   if (minute !== lastChromeMinute) {
     lastChromeMinute = minute;
@@ -179,17 +268,17 @@ function bindKeys() {
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    const selected = timeline.selected();
+    const selected = view.selected();
     switch (e.key) {
       case "j":
       case "ArrowDown":
         if (e.key === "ArrowDown" && !e.shiftKey) return;
-        timeline.selectStep(1);
+        view.selectStep(1);
         break;
       case "k":
       case "ArrowUp":
         if (e.key === "ArrowUp" && !e.shiftKey) return;
-        timeline.selectStep(-1);
+        view.selectStep(-1);
         break;
       case "x":
         if (selected) void toggle(selected);
@@ -199,18 +288,18 @@ function bindKeys() {
         break;
       case "Escape":
         if (panel.isOpen) panel.close();
-        else timeline.select(null);
+        else view.select(null);
         break;
       case "t":
-        timeline.scrollToTime(Date.now(), 0.3, true);
+        view.scrollToTime(Date.now(), 0.3, true);
         break;
       case "+":
       case "=":
-        timeline.zoomBy(1.5);
+        view.zoomBy(1.5);
         break;
       case "-":
       case "_":
-        timeline.zoomBy(1 / 1.5);
+        view.zoomBy(1 / 1.5);
         break;
       case "?":
         toast("j/k move · x done · Enter open · t now · +/− zoom · Esc close");
@@ -225,10 +314,15 @@ function bindKeys() {
 // ---- boot ---------------------------------------------------------------------------------------------------
 
 async function boot() {
-  $("zoomIn").addEventListener("click", () => timeline.zoomBy(1.5));
-  $("zoomOut").addEventListener("click", () => timeline.zoomBy(1 / 1.5));
-  $("nowBtn").addEventListener("click", () => timeline.scrollToTime(Date.now(), 0.3, true));
-  window.addEventListener("resize", () => timeline.onResize());
+  $("zoomIn").addEventListener("click", () => view.zoomBy(1.5));
+  $("zoomOut").addEventListener("click", () => view.zoomBy(1 / 1.5));
+  $("nowBtn").addEventListener("click", () => view.scrollToTime(Date.now(), 0.3, true));
+  $("settingsBtn").addEventListener("click", () => panel.openSettings());
+  window.addEventListener("resize", ensureView);
+  watchInstallPrompt(() => panel.refresh());
+  void registerServiceWorker();
+  window.addEventListener("resize", () => view.onResize());
+  setUrgencyThresholds(state.settings.soon_hours, state.settings.urgent_hours);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       tick();
@@ -243,7 +337,7 @@ async function boot() {
   } catch (error) {
     toast(`Could not load data: ${error instanceof Error ? error.message : error}`, "error");
   }
-  timeline.scrollToTime(Date.now(), 0.3);
+  view.scrollToTime(Date.now(), 0.3);
   tick();
   setInterval(tick, TICK_MS);
   setInterval(() => void poll(), POLL_MS);

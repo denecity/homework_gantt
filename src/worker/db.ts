@@ -1,4 +1,15 @@
-import type { AppState, Assignment, Course, LectureSlot, Marker, Semester, Series } from "../shared/schema";
+import { parseSettings } from "../shared/settings";
+import type {
+  AppState,
+  Assignment,
+  Course,
+  LectureSlot,
+  Marker,
+  NotificationRule,
+  PushDevice,
+  Semester,
+  Series,
+} from "../shared/schema";
 
 export class HttpError extends Error {
   constructor(
@@ -22,6 +33,25 @@ const mapAssignment = (r: Row): Assignment => ({
   detached: r.detached === 1,
 });
 
+export const mapRule = (r: Row): NotificationRule => ({
+  ...(r as unknown as NotificationRule),
+  enabled: r.enabled === 1,
+  include_overdue: r.include_overdue === 1,
+  max_items: Number(r.max_items ?? 8),
+  skip_if_empty: r.skip_if_empty === 1,
+  only_open: r.only_open === 1,
+  weekdays: (json(r.weekdays as string) as unknown as number[]) ?? [],
+  course_ids: json(r.course_ids as string),
+});
+
+export function readSettings(raw: string | undefined) {
+  try {
+    return parseSettings(raw ? JSON.parse(raw) : {});
+  } catch {
+    return parseSettings({});
+  }
+}
+
 export const BUMP_VERSION = "UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'";
 
 export async function loadVersion(db: D1Database): Promise<number> {
@@ -30,7 +60,7 @@ export async function loadVersion(db: D1Database): Promise<number> {
 }
 
 export async function loadState(db: D1Database): Promise<AppState> {
-  const [meta, semester, courses, markers, slots, series, assignments, reviews] = await db.batch<Row>([
+  const [meta, semester, courses, markers, slots, series, assignments, reviews, rules, settings] = await db.batch<Row>([
     db.prepare("SELECT value FROM meta WHERE key = 'version'"),
     db.prepare("SELECT name, starts_on, ends_on, lectures_end_on, review_hours FROM semester WHERE id = 1"),
     db.prepare("SELECT * FROM courses ORDER BY sort_order, name"),
@@ -39,6 +69,8 @@ export async function loadState(db: D1Database): Promise<AppState> {
     db.prepare("SELECT * FROM series ORDER BY id"),
     db.prepare("SELECT * FROM assignments ORDER BY due_at"),
     db.prepare("SELECT key FROM review_done"),
+    db.prepare("SELECT * FROM notification_rules ORDER BY sort_order, id"),
+    db.prepare("SELECT value FROM meta WHERE key = 'settings'"),
   ]);
   return {
     version: Number(meta!.results[0]?.value ?? 0),
@@ -49,6 +81,8 @@ export async function loadState(db: D1Database): Promise<AppState> {
     series: series!.results.map(mapSeries),
     assignments: assignments!.results.map(mapAssignment),
     review_done: reviews!.results.map((r) => r.key as string),
+    notification_rules: rules!.results.map(mapRule),
+    settings: readSettings(settings!.results[0]?.value as string | undefined),
   };
 }
 
@@ -63,6 +97,15 @@ export const getMarker = (db: D1Database, id: string) => getOne<Marker>(db, "mar
 export const getSlot = (db: D1Database, id: string) => getOne(db, "lecture_slots", id, mapSlot);
 export const getSeries = (db: D1Database, id: string) => getOne(db, "series", id, mapSeries);
 export const getAssignment = (db: D1Database, id: string) => getOne(db, "assignments", id, mapAssignment);
+
+export const getRule = (db: D1Database, id: string) => getOne(db, "notification_rules", id, mapRule);
+
+export async function listDevices(db: D1Database): Promise<PushDevice[]> {
+  const { results } = await db
+    .prepare("SELECT id, label, endpoint, created_at, last_ok_at, last_error, failures FROM push_devices ORDER BY created_at")
+    .all<Row>();
+  return results as unknown as PushDevice[];
+}
 
 export async function getSemester(db: D1Database): Promise<Semester | null> {
   return db

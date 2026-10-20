@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 import { HttpError } from "./db";
-import { operations, runOperation } from "./service";
+import { operations, runOperation, type Env } from "./service";
 
 const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "homework-gantt", version: "2.0.0" };
@@ -15,7 +15,7 @@ const INSTRUCTIONS = `Homework Gantt: a vertical timeline of the current semeste
 - Lecture reviews: every lecture creates a review item from lecture end to +review_hours; its id is 'slotId@YYYY-MM-DD' and can be passed to set_done.
 - Prefer skip_week over deleting series occurrences.`;
 
-const HIDDEN = new Set(["get_version"]);
+const HIDDEN = new Set(["get_version", "get_push_config", "subscribe_push", "unsubscribe_push"]);
 
 const BRIEFING_PROMPT = {
   name: "homework_briefing",
@@ -51,7 +51,7 @@ function toolList() {
     });
 }
 
-async function handle(req: RpcRequest, db: D1Database): Promise<unknown> {
+async function handle(req: RpcRequest, env: Env): Promise<unknown> {
   const params = req.params ?? {};
   switch (req.method) {
     case "initialize": {
@@ -71,7 +71,7 @@ async function handle(req: RpcRequest, db: D1Database): Promise<unknown> {
       const name = String(params.name ?? "");
       if (HIDDEN.has(name) || !(name in operations)) return rpcError(req.id, -32602, `Unknown tool: ${name}`);
       try {
-        const result = await runOperation(name, params.arguments, db);
+        const result = await runOperation(name, params.arguments, env);
         const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
         return rpcResult(req.id, { content: [{ type: "text", text }] });
       } catch (error) {
@@ -84,7 +84,7 @@ async function handle(req: RpcRequest, db: D1Database): Promise<unknown> {
     case "prompts/get": {
       if (params.name !== BRIEFING_PROMPT.name) return rpcError(req.id, -32602, `Unknown prompt: ${String(params.name)}`);
       const days = Number((params.arguments as Record<string, string> | undefined)?.days ?? 3) || 3;
-      const text = (await runOperation("get_briefing", { days }, db)) as string;
+      const text = (await runOperation("get_briefing", { days }, env)) as string;
       return rpcResult(req.id, {
         description: BRIEFING_PROMPT.description,
         messages: [
@@ -113,7 +113,7 @@ const CORS = {
   "Access-Control-Expose-Headers": "Mcp-Session-Id",
 };
 
-export async function handleMcp(request: Request, db: D1Database): Promise<Response> {
+export async function handleMcp(request: Request, env: Env): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (request.method !== "POST") {
     // Stateless server: no server-initiated SSE stream, no sessions to delete.
@@ -129,7 +129,7 @@ export async function handleMcp(request: Request, db: D1Database): Promise<Respo
 
   const batch = Array.isArray(body);
   const requests = (batch ? body : [body]) as RpcRequest[];
-  const responses = (await Promise.all(requests.map((r) => handle(r, db)))).filter((r) => r !== null);
+  const responses = (await Promise.all(requests.map((r) => handle(r, env)))).filter((r) => r !== null);
 
   if (!responses.length) return new Response(null, { status: 202, headers: CORS });
   return Response.json(batch ? responses : responses[0], { headers: CORS });

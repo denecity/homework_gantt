@@ -954,21 +954,24 @@ a { color: inherit; }
 
 @media (max-width: 720px) {
   :root {
-    --gutter: 42px;
+    --gutter: 44px;
     --col-min: 52px;
     --topbar-h: 52px;
     --heads-h: 40px;
     --radius: 7px;
   }
-  .topbar { padding: 0 10px; }
-  .brand { gap: 9px; }
+  .topbar { padding: 0 10px; gap: 8px; }
+  .brand { gap: 8px; min-width: 0; flex: 1; }
+  .brand-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .brand-mark { width: 24px; height: 24px; border-radius: 7px; }
   .brand-text strong { font-size: 14px; }
   .brand-text span { font-size: 11px; }
+  .controls { gap: 6px; }
   .seg { height: 32px; }
-  .seg button { width: 30px; }
-  .seg-label { min-width: 38px; font-size: 11px; }
-  .btn-now { height: 32px; padding: 0 11px; }
+  .seg button { width: 28px; font-size: 16px; }
+  .seg-label { min-width: 30px; font-size: 10.5px; }
+  .btn-now { height: 32px; padding: 0 10px; font-size: 12px; }
+  .top-icon { width: 32px; height: 32px; }
   .shelf { padding: 6px 10px; gap: 8px; }
   .shelf-title { display: none; }
 
@@ -1010,3 +1013,385 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ===================================================================================
+   Phone: single-lane timeline. Cards sit at their deadline, a tail runs up to the
+   release. Shown only when body[data-view="mobile"] (set by MobileTimeline).
+   =================================================================================== */
+
+.mcanvas { display: none; position: relative; }
+body[data-view="mobile"] .canvas { display: none; }
+body[data-view="mobile"] .mcanvas { display: block; }
+
+.mheads {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  height: 34px;
+  background: color-mix(in oklab, var(--bg) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line-strong);
+}
+.mcorner { flex: none; width: var(--gutter); border-right: 1px solid var(--line); }
+.mhead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.mhead::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: .5;
+}
+.mhead.review { border-left: 1px dashed var(--line-strong); color: var(--faint); }
+
+/* lane divider down the whole timeline */
+.mgrid::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--work-pct, 58) * 1%);
+  border-left: 1px dashed var(--line);
+  pointer-events: none;
+}
+body:not([data-split="1"]) .mgrid::before { display: none; }
+
+.mgut {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--gutter);
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+  z-index: 3;
+}
+.mgrid { position: absolute; left: var(--gutter); right: 0; top: 0; bottom: 0; }
+.mlayer { position: absolute; inset: 0; pointer-events: none; }
+
+.mday { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.mday.mon { border-top-color: var(--line-strong); }
+.mdlab {
+  position: sticky;
+  top: var(--mheads-h, 0px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 0 4px;
+  background: var(--bg);
+  line-height: 1.05;
+}
+.mdlab i { font-style: normal; font-size: 9.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.mdlab b { font-size: 16px; font-weight: 650; letter-spacing: -.02em; }
+.mdlab u { text-decoration: none; font-size: 9px; font-weight: 700; color: var(--accent); text-transform: uppercase; }
+.mday.wknd .mdlab b, .mday.wknd .mdlab i { color: var(--faint); }
+.mhlab {
+  position: absolute;
+  width: var(--gutter);
+  text-align: center;
+  transform: translateY(-50%);
+  font: 500 9px/1 "JetBrains Mono", ui-monospace, monospace;
+  color: var(--faint);
+}
+
+.mlec {
+  position: absolute;
+  left: -10px;
+  width: 5px;
+  min-height: 3px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--c) 55%, transparent);
+}
+
+.mnow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  z-index: 6;
+  border-top: 2px solid var(--now-c);
+  filter: drop-shadow(0 0 5px color-mix(in oklab, var(--now-c) 70%, transparent));
+}
+.mnow b {
+  position: absolute;
+  left: calc(-1 * var(--gutter) + 3px);
+  top: -10px;
+  width: calc(var(--gutter) - 6px);
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--now-c);
+  color: #fff;
+  font: 650 10px/1 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.mlane { position: absolute; inset: 0; }
+
+.mtail {
+  position: absolute;
+  width: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--c) 24%, transparent);
+  overflow: hidden;
+}
+.mtail::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: calc(clamp(0, (var(--now) - var(--s)) / (var(--e) - var(--s)), 1) * 100%);
+  background: var(--c);
+  border-radius: 2px;
+}
+.mtail::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -3.5px;
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--c) 55%, transparent);
+}
+.mtail.done { opacity: .3; }
+.manchor {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 0 2.5px var(--bg-2);
+}
+.mlead {
+  position: absolute;
+  border-left: 1.5px dotted color-mix(in oklab, var(--c) 55%, transparent);
+  border-bottom: 1.5px dotted color-mix(in oklab, var(--c) 55%, transparent);
+  border-bottom-left-radius: 7px;
+}
+
+.mcard {
+  position: absolute;
+  left: calc(var(--l, 0) * 1% + 24px);
+  right: calc(var(--r, 0) * 1% + 8px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px 0 12px;
+  border-radius: 13px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--c) 11%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--c) 30%, transparent);
+  box-shadow: inset 3px 0 0 var(--c), 0 2px 10px rgba(0, 0, 0, .3);
+}
+.mcard.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+.mfill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(clamp(0, (var(--now) - var(--s)) / (var(--e) - var(--s)), 1) * 100%);
+  pointer-events: none;
+}
+.mchk {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.8px solid color-mix(in oklab, var(--c) 85%, white 8%);
+  background: rgba(0, 0, 0, .26);
+}
+.mchk::after {
+  content: "";
+  position: absolute;
+  left: 8.4px;
+  top: 4.4px;
+  width: 6px;
+  height: 11px;
+  border: solid transparent;
+  border-width: 0 2.2px 2.2px 0;
+  transform: rotate(45deg);
+}
+.mbody { flex: 1; min-width: 0; line-height: 1.25; }
+.ml1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.mbdg { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .07em; color: var(--c); }
+.mtitle { font-size: 14px; font-weight: 620; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msub { margin-top: 2px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msub:empty { display: none; }
+.mcd { flex: none; text-align: right; }
+.mcd b { display: block; font: 600 13px/1 "JetBrains Mono", ui-monospace, monospace; }
+.mcd span { display: block; margin-top: 3px; font-size: 10px; color: var(--faint); }
+
+.mcard[data-u="soon"] .mcd b { color: var(--amber); }
+.mcard[data-u="urgent"] { border-color: color-mix(in oklab, var(--red) 65%, transparent); }
+.mcard[data-u="urgent"] .mcd b { color: var(--red); }
+.mcard[data-u="overdue"] { border: 1px dashed var(--red); background: color-mix(in oklab, var(--red) 10%, var(--surface)); }
+.mcard[data-u="overdue"] .mcd b, .mcard[data-u="overdue"] .mcd span { color: var(--red); }
+.mcard[data-u="future"] { background: color-mix(in oklab, var(--c) 5%, var(--bg-2)); box-shadow: inset 3px 0 0 color-mix(in oklab, var(--c) 45%, transparent); }
+.mcard[data-u="future"] .mtitle { color: var(--muted); }
+.mcard[data-u="done"] { opacity: .42; }
+.mcard[data-u="done"] .mtitle { text-decoration: line-through; }
+.mcard[data-u="done"] .mchk { background: var(--green); border-color: var(--green); }
+.mcard[data-u="done"] .mchk::after { border-color: var(--bg); }
+
+.mcard.review {
+  left: calc(var(--l, 0) * 1% + 22px);
+  border-style: dashed;
+  box-shadow: none;
+  background: color-mix(in oklab, var(--c) 6%, var(--bg-2));
+  border-radius: 11px;
+}
+.mcard.review .mchk { width: 21px; height: 21px; border-width: 1.5px; }
+.mcard.review .mchk::after { left: 6.6px; top: 3.3px; width: 5px; height: 9px; border-width: 0 2px 2px 0; }
+.mcard.review .mtitle { font-size: 12px; font-weight: 600; color: color-mix(in oklab, var(--c) 45%, var(--text)); }
+.mcard.review .mbdg { font-size: 12px; }
+.mcard.review .mcd b { font-size: 10.5px; color: var(--faint); }
+.mcard.review .mcd span { display: none; }
+
+/* Two narrow lanes: give the title every pixel the countdown does not need. */
+body[data-split="1"] .mcard { gap: 7px; padding: 0 8px 0 10px; }
+body[data-split="1"] .mcd span { display: none; }
+body[data-split="1"] .mcd b { font-size: 11.5px; }
+body[data-split="1"] .mtitle { font-size: 13px; }
+body[data-split="1"] .msub { font-size: 10.5px; }
+body[data-split="1"] .mchk { width: 23px; height: 23px; }
+body[data-split="1"] .mchk::after { left: 7.4px; top: 3.8px; width: 5.5px; height: 10px; }
+body[data-split="1"] .mcard.review { padding: 0 7px 0 8px; gap: 6px; }
+body[data-split="1"] .mcard.review .mbdg { font-size: 11px; }
+
+.mline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--mk, color-mix(in oklab, var(--accent) 70%, transparent)); }
+.mline-exam { --mk: var(--amber); border-top-style: dashed; }
+.mline-other { --mk: var(--faint); border-top-style: dashed; }
+.mmlabel {
+  pointer-events: auto;
+  position: absolute;
+  left: 8px;
+  top: 0;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--mk, var(--line-strong));
+  background: color-mix(in oklab, var(--mk, var(--surface)) 18%, var(--bg));
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+}
+.mmlabel small { font-weight: 500; color: var(--muted); }
+.mbreak {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .035) 0 6px, transparent 6px 14px);
+  border-top: 1px dashed var(--line-strong);
+  border-bottom: 1px dashed var(--line-strong);
+}
+.mbreak .mmlabel { position: sticky; top: 8px; transform: none; margin-top: 8px; display: inline-flex; }
+
+/* ---- next-up banner ---------------------------------------------------------------- */
+
+.nextup {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 9px 16px 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(100deg, color-mix(in oklab, var(--c) 14%, var(--surface)), var(--surface) 72%);
+  border: 1px solid color-mix(in oklab, var(--c) 32%, transparent);
+}
+.nextup[data-u="soon"] { --c: var(--amber); }
+.nextup[data-u="urgent"] { --c: var(--red); }
+.nu-cd { flex: none; text-align: center; }
+.nu-cd b { display: block; font: 600 19px/1 "JetBrains Mono", ui-monospace, monospace; letter-spacing: -.02em; color: var(--c); }
+.nu-cd small { display: block; margin-top: 3px; font-size: 9px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.nu-main { flex: 1; min-width: 0; text-align: left; border: 0; background: none; cursor: pointer; padding: 0; }
+.nu-title { display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nu-title b { color: var(--c); font-weight: 700; }
+.nu-sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+.nu-chk {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.8px solid color-mix(in oklab, var(--c) 75%, transparent);
+  background: rgba(0, 0, 0, .2);
+  cursor: pointer;
+}
+.nu-chk:hover { background: color-mix(in oklab, var(--c) 30%, transparent); }
+
+/* ---- notification rules in the panel ------------------------------------------------ */
+
+.top-icon { display: grid; place-items: center; }
+.rules { display: flex; flex-direction: column; gap: 8px; }
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+.rule.off { opacity: .5; }
+.rule-sw {
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  position: relative;
+  cursor: pointer;
+  transition: background .15s;
+}
+.rule-sw i {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .15s, background .15s;
+}
+.rule-sw[aria-checked="true"] { background: color-mix(in oklab, var(--green) 35%, var(--surface-2)); border-color: color-mix(in oklab, var(--green) 50%, transparent); }
+.rule-sw[aria-checked="true"] i { transform: translateX(16px); background: var(--green); }
+.rule-text { min-width: 0; line-height: 1.3; }
+.rule-text b { display: block; font-size: 13px; font-weight: 620; }
+.rule-text small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+@media (max-width: 720px) {
+  .nextup { margin: 8px 10px 0; }
+  .mcard { left: calc(var(--l, 0) * 1% + 22px); right: calc(var(--r, 0) * 1% + 6px); }
+  .mcard.review { left: calc(var(--l, 0) * 1% + 20px); }
+}
+
+/* progress fill can be switched off in settings */
+body.no-fill .card-fill, body.no-fill .mfill, body.no-fill .mtail::before { display: none; }

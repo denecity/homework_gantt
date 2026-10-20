@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Settings } from "./settings-defaults";
 import { isDate, isInstant, isTime } from "./time";
 
 // ---- primitives ----------------------------------------------------------
@@ -87,6 +88,62 @@ export const AssignmentInput = z.object({
 });
 export const AssignmentPatch = AssignmentInput.omit({ id: true, course_id: true }).partial();
 
+export const TriggerKind = z.enum(["relative", "digest"]);
+export const AppliesTo = z.enum(["assignments", "reviews", "all"]);
+export const Anchor = z.enum(["due", "release"]);
+
+const PLACEHOLDERS =
+  "Placeholders: {course} {title} {due} {left} {count} {list}";
+
+export const NotificationRuleInput = z.object({
+  id: Id,
+  label: z.string().min(1).describe("human name, e.g. 'Day before'"),
+  enabled: z.boolean().optional().describe("default true"),
+  trigger_kind: TriggerKind.describe(
+    "relative = one notification per item, offset from its deadline/release; digest = one summary at a wall-clock time",
+  ),
+
+  anchor: Anchor.optional().describe("relative only: measure the offset from the deadline or the release. Default 'due'"),
+  offset_minutes: z
+    .number()
+    .int()
+    .min(-60 * 24 * 30)
+    .max(60 * 24 * 30)
+    .optional()
+    .describe("relative only: negative = before the anchor (-1440 = 24h before). Default 0"),
+
+  at_time: TimeStr.optional().describe("digest only: Europe/Zurich time of day. Default 08:00"),
+  weekdays: z.array(Weekday).optional().describe("digest only: days it runs; omit or [] = every day"),
+  window_hours: z.number().int().min(1).max(24 * 60).optional().describe("digest only: look-ahead. Default 48"),
+  include_overdue: z.boolean().optional().describe("digest only: also list overdue items. Default true"),
+  max_items: z
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .optional()
+    .describe("digest only: most items to list; the rest are summarised as '+N more'. Default 8"),
+  skip_if_empty: z.boolean().optional().describe("digest only: send nothing when there is nothing to report. Default true"),
+
+  applies_to: AppliesTo.optional().describe("default 'all' (assignments and lecture reviews)"),
+  course_ids: z.array(Id).optional().describe("restrict to these courses; omit or [] = all"),
+  only_open: z.boolean().optional().describe("skip items already marked done. Default true"),
+
+  title: z.string().min(1).describe(`notification title. ${PLACEHOLDERS}`),
+  body: z.string().describe(`notification body. ${PLACEHOLDERS}`),
+
+  quiet_from: TimeStr.nullish().describe("start of quiet hours, e.g. '22:00'"),
+  quiet_until: TimeStr.nullish().describe("notifications landing in quiet hours are held until this time, e.g. '07:30'"),
+  sort_order: z.number().int().optional(),
+});
+export const NotificationRulePatch = NotificationRuleInput.omit({ id: true }).partial();
+
+export const PushSubscriptionInput = z.object({
+  endpoint: z.url(),
+  keys: z.object({ p256dh: z.string().min(1), auth: z.string().min(1) }),
+  label: z.string().optional(),
+});
+
 // ---- rows / state --------------------------------------------------------
 
 export interface Semester {
@@ -145,6 +202,38 @@ export interface Assignment {
   done_at: string | null;
   detached: boolean;
 }
+export interface NotificationRule {
+  id: string;
+  label: string;
+  enabled: boolean;
+  trigger_kind: z.infer<typeof TriggerKind>;
+  anchor: z.infer<typeof Anchor>;
+  offset_minutes: number;
+  at_time: string;
+  weekdays: number[];
+  window_hours: number;
+  include_overdue: boolean;
+  skip_if_empty: boolean;
+  max_items: number;
+  applies_to: z.infer<typeof AppliesTo>;
+  course_ids: string[];
+  only_open: boolean;
+  title: string;
+  body: string;
+  quiet_from: string | null;
+  quiet_until: string | null;
+  sort_order: number;
+}
+export interface PushDevice {
+  id: string;
+  label: string;
+  endpoint: string;
+  created_at: string;
+  last_ok_at: string | null;
+  last_error: string | null;
+  failures: number;
+}
+
 export interface AppState {
   version: number;
   semester: Semester | null;
@@ -154,4 +243,6 @@ export interface AppState {
   series: Series[];
   assignments: Assignment[];
   review_done: string[];
+  notification_rules: NotificationRule[];
+  settings: Settings;
 }

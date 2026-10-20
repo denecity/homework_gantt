@@ -7,19 +7,12 @@
 //   - JS per tick touches countdown text of cards that are actually on screen.
 // DOM nodes are keyed and reused across data refreshes.
 
-import { expandLectures, packLanes, timelineItems, type TimelineItem } from "../shared/expand";
+import { expandLectures, packLanes, viewItems, type TimelineItem } from "../shared/expand";
 import type { AppState, Course, Marker } from "../shared/schema";
+import type { Settings } from "../shared/settings-defaults";
 import { HOUR, MINUTE, addDays, dateKey, daysBetween, parseInstant, startOfDay, weekdayOf } from "../shared/time";
+import type { TimelineCallbacks, TimelineView } from "./view";
 import { $, fmtDay, fmtFull, fmtMonth, fmtSpan, fmtSpanShort, fmtTime, h, urgencyOf } from "./util";
-
-export interface TimelineCallbacks {
-  open(item: TimelineItem): void;
-  toggle(item: TimelineItem): void;
-  moveDeadline(item: TimelineItem, dueMs: number): void;
-  openCourse(course: Course): void;
-  reorderCourses(ids: string[]): void;
-  openMarker(marker: Marker): void;
-}
 
 interface CardRef {
   el: HTMLElement;
@@ -53,7 +46,7 @@ function shortTitle(title: string): string {
   return num ? `#${num[1]}` : title.split(/\s+/)[0]!.slice(0, 6);
 }
 
-export class Timeline {
+export class Timeline implements TimelineView {
   private root = document.documentElement;
   private scroller = $("scroller");
   private canvas = $("canvas");
@@ -108,8 +101,8 @@ export class Timeline {
     { root: this.scroller, rootMargin: "100% 0px" },
   );
 
-  constructor(private cb: TimelineCallbacks) {
-    this.pxh = readStored() ?? Math.max(4, Math.min(24, (window.innerHeight - 140) / 96));
+  constructor(private cb: TimelineCallbacks, settings: Settings) {
+    this.pxh = (settings.remember_zoom ? readStored() : null) ?? settings.desktop_zoom_pxh;
     this.applyZoom();
     this.bindGestures();
   }
@@ -300,13 +293,15 @@ export class Timeline {
   }
 
   private renderItems(state: AppState) {
-    this.items = timelineItems(state);
+    this.items = viewItems(state);
     const courses = new Map(state.courses.map((c) => [c.id, c]));
     const liveCards = new Set<string>();
     const liveStatics = new Set<string>();
 
     // Lectures (background) and course exams.
-    for (const lec of expandLectures(state.lecture_slots, state.semester, state.markers)) {
+    for (const lec of state.settings.show_lectures
+      ? expandLectures(state.lecture_slots, state.semester, state.markers)
+      : []) {
       const col = this.columns.get(lec.course_id);
       if (!col) continue;
       const key = `lec:${lec.key}`;
@@ -691,5 +686,21 @@ export class Timeline {
 
   selected(): TimelineItem | undefined {
     return this.selectedId ? this.cards.get(this.selectedId)?.item : undefined;
+  }
+
+  destroy() {
+    this.cardObserver.disconnect();
+    this.dayObserver.disconnect();
+    this.heads.replaceChildren();
+    this.cols.replaceChildren();
+    this.gutter.replaceChildren();
+    this.daysLayer.replaceChildren();
+    this.markersLayer.replaceChildren();
+    this.columns.clear();
+    this.cards.clear();
+    this.statics.clear();
+    this.visible.clear();
+    this.viewSig = "";
+    this.markersSig = "";
   }
 }

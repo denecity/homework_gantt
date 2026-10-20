@@ -22,5 +22,6 @@
   ],
   "workers_dev": true,
   "routes": [{ "pattern": "hw.mykinsky.org", "custom_domain": true }],
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true }
 }

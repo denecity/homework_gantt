@@ -59,12 +59,21 @@ export function fmtSpanShort(ms: number): string {
 
 export type Urgency = "done" | "overdue" | "urgent" | "soon" | "open" | "future";
 
+let soonMs = 24 * HOUR;
+let urgentMs = 6 * HOUR;
+
+/** Set from the stored settings, so the colour thresholds are configurable. */
+export function setUrgencyThresholds(soonHours: number, urgentHours: number) {
+  soonMs = soonHours * HOUR;
+  urgentMs = urgentHours * HOUR;
+}
+
 export function urgencyOf(startMs: number, endMs: number, done: boolean, now: number): Urgency {
   if (done) return "done";
   const left = endMs - now;
   if (left < 0) return "overdue";
-  if (left < 6 * HOUR) return "urgent";
-  if (left < DAY) return "soon";
+  if (left < urgentMs) return "urgent";
+  if (left < soonMs) return "soon";
   return startMs > now ? "future" : "open";
 }
 

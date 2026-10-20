@@ -127,6 +127,23 @@ Times are stored as UTC ISO strings. Local wall-clock inputs (e.g. "Mon 12:00") 
 - [x] Demo seed script for local dev (runs through MCP)
 - [x] README (wrangler setup, D1, deploy, connecting MCP in Claude)
 - [x] Local verification in browser (desktop + mobile)
-- [ ] Remote: `wrangler login` → `npm run setup:remote` (needs the owner's Cloudflare login)
-- [ ] Disconnect the old Cloudflare Pages project
-- [ ] Real HS 2026 setup via Claude (Chrome → MCP)
+- [x] Remote: deployed to https://hw.mykinsky.org (Worker + D1 + cron)
+- [x] Disconnect the old Cloudflare Pages project (deleted, domain moved to the Worker)
+- [x] Real HS 2026 setup via Claude (Chrome → MCP)
+
+## Round 2 — mobile, PWA, notifications, settings
+
+| Topic | Decision |
+|-------|----------|
+| Mobile layout | ✅ Two lanes — Work (exercises, deadlines, submissions) and Repetition (lecture reviews). Card anchored at its deadline, tail up to the release, each lane stacked independently with a leader line when deadlines collide. Desktop keeps columns. |
+| Installable | ✅ PWA: manifest, generated icons, service worker (also deletes the old June caches) |
+| Notifications | ✅ Push via VAPID, sent by a Worker cron every 5 min |
+| Configurability | ✅ **Everything that was a design decision is now a setting or a rule, editable over MCP** — layouts, breakpoint, what the timeline shows, urgency thresholds, zoom defaults, and every notification rule |
+| Tab bar | ❌ Not built; the app stays a single timeline screen |
+
+- [x] Notification rules model + planner (`src/shared/notify.ts`) with dedupe keys and quiet hours
+- [x] Web Push (VAPID + aes128gcm) hand-rolled on WebCrypto (`src/worker/push.ts`), verified end to end
+- [x] Settings model (`src/shared/settings.ts`), zod-free defaults so the browser bundle stays ~47 KB
+- [x] Phone view (`src/web/mobile.ts`), swappable live when the layout setting changes
+- [x] Settings sheet in the app: install state, notification toggle, rule list with on/off switches, test send
+- [x] Tests: 30 passing (time, expansion, lanes, notification planning, settings)

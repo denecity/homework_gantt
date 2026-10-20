@@ -1,4 +1,4 @@
-import type { AppState, Assignment, Course, Marker } from "../shared/schema";
+import type { AppState, Assignment, Course, Marker, NotificationRule } from "../shared/schema";
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -27,4 +27,8 @@ export const api = {
   updateCourse: (id: string, patch: Partial<Course>) => request<Course>("PATCH", `/api/courses/${enc(id)}`, patch),
   updateMarker: (id: string, patch: Partial<Marker>) => request<Marker>("PATCH", `/api/markers/${enc(id)}`, patch),
   deleteMarker: (id: string) => request("DELETE", `/api/markers/${enc(id)}`),
+  pushConfig: () => request<{ publicKey: string | null; configured: boolean; devices: number }>("GET", "/api/push/config"),
+  updateRule: (id: string, patch: Partial<NotificationRule>) =>
+    request<NotificationRule>("PATCH", `/api/notification-rules/${enc(id)}`, patch),
+  testNotification: () => request<{ sent: number; failed: number; pruned: number }>("POST", "/api/notifications/test", {}),
 };

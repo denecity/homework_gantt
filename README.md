@@ -9,7 +9,11 @@ and has a built-in **MCP server**, so Claude can set it up and edit it.
 - Semester dates, breaks and exams appear as markers. The view is limited to the semester.
 - Zoom (buttons, `+`/`−`, ctrl+scroll, pinch), jump to now, and a click-to-edit panel (a bottom sheet on mobile).
 - Drag a card's bottom edge to move its deadline. Keyboard: `j/k` move, `x` done, `Enter` open, `t` now, `Esc` close.
+- **Installable** (PWA) with a service worker, and **push notifications** driven by rules you edit over MCP.
 - Open tabs pick up changes made through MCP or on other devices within about 15s.
+- On phones the timeline switches to two lanes — **Work** (exercises, deadlines, submissions) and
+  **Repetition** (lecture reviews). Cards sit at their deadline with a tail up to their release, and each
+  lane stacks independently. Layout, lane split and labels are settings, not hard-coded rules.
 
 Design decisions and the data model are in [SPEC.md](SPEC.md). **There is no auth by design:** anyone with the URL can
 read and edit.
@@ -97,8 +101,54 @@ The MCP endpoint is `https://<your-worker>.workers.dev/mcp` (Streamable HTTP, st
 
 Tools: `get_briefing`, `week_summary`, `get_upcoming`, `get_overdue`, `list_assignments`, `get_state`,
 `set_semester`, `create/update/delete_marker`, `create/update/delete_course`, `reorder_courses`, `create/update/delete_lecture_slot`,
-`create/update/delete_series`, `skip_week`, `create/update/delete_assignment`, `move_deadline`, `set_done`.
-There is also a `homework_briefing` prompt.
+`create/update/delete_series`, `skip_week`, `create/update/delete_assignment`, `move_deadline`, `set_done`,
+`get/update/reset_settings`, `list/create/update/delete_notification_rule`, `install_default_notification_rules`,
+`preview_notifications`, `list_recent_notifications`, `list/delete_notification_device`, `send_test_notification`,
+`run_notifications_now`. There is also a `homework_briefing` prompt.
+
+## Settings
+
+Layout and behaviour are data, not code. `get_settings` lists every key with its current value, its
+default and what it does; `update_settings` changes any subset; `reset_settings` restores the defaults.
+Open tabs apply the change within ~15s, including swapping the whole layout.
+
+Covered: `phone_layout` / `desktop_layout` (`lane` or `columns`) and `phone_breakpoint_px`;
+`lane_mode` (`split` or `single`), `work_lane_pct`, `work_lane_label`, `review_lane_label`;
+`show_next_up`, `show_overdue_shelf`, `show_reviews`, `show_lectures`, `show_progress_fill`, `hide_done`;
+`soon_hours` and `urgent_hours` (when a card turns amber, then red), `review_grace_days`;
+`phone_zoom_pxh`, `desktop_zoom_pxh`, `remember_zoom`.
+
+## Notifications
+
+Nothing about reminders is hard-coded. A rule is either:
+
+- **`relative`** — one notification per item, `offset_minutes` from its `anchor` (`due` or `release`).
+  `-1440` is 24h before a deadline; `+240` is 4h after a lecture ends.
+- **`digest`** — one summary at `at_time` on the chosen `weekdays`, covering the next `window_hours`,
+  optionally including overdue work, capped at `max_items`.
+
+Every rule filters by `applies_to` (assignments / reviews / all), `course_ids` and `only_open`, writes its own
+`title` and `body` from `{course} {short} {title} {due} {left} {count} {list}`, and can defer around its own
+`quiet_from` / `quiet_until`.
+
+`install_default_notification_rules` adds a starter set (morning digest, a day before each deadline, a lecture
+review nudge) that you can then rewrite or delete. `preview_notifications` dry-runs the next N days without
+sending anything — use it before trusting a new rule.
+
+A cron trigger evaluates the rules every 5 minutes. Each notification is logged by key, so a rule never fires
+twice, and a missed window is caught up once rather than flooding the device.
+
+### Push setup
+
+Generate a VAPID keypair and store it as Worker secrets:
+
+```bash
+node -e 'const{webcrypto:c}=require("node:crypto");const b=b=>Buffer.from(b).toString("base64url");c.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]).then(async k=>console.log("public:",b(await c.subtle.exportKey("raw",k.publicKey)),"\nprivate:",b(await c.subtle.exportKey("pkcs8",k.privateKey))))'
+```
+
+Then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (an `https:` URL or `mailto:`) with
+`npx wrangler secret put <NAME>`. Install the app on the phone (iOS requires this before it will allow
+notifications), then turn notifications on from the bell button.
 
 ### Typical semester setup (Chrome → MCP)
 
@@ -121,6 +171,12 @@ Times without a timezone, like `2026-09-21T12:00`, are read as Europe/Zurich.
 | POST | `/api/done` `{id, done}` | `set_done` (assignment id or review id `slot@YYYY-MM-DD`) |
 | GET/POST | `/api/assignments` | list / create |
 | PATCH/DELETE | `/api/assignments/:id` | update / delete |
+| GET/PATCH | `/api/settings` | read / update settings |
+| POST | `/api/settings/reset` | `reset_settings` |
+| GET/POST, PATCH/DELETE `:id` | `/api/notification-rules` | rule CRUD |
+| GET | `/api/notifications/preview?days=7` | dry run |
+| POST | `/api/notifications/test`, `/api/notifications/run` | send a test / run the scheduler now |
+| GET/POST | `/api/push/config`, `/api/push/subscribe`, `/api/push/unsubscribe` | device registration |
 | PUT | `/api/courses/order` `{ids}` | `reorder_courses` |
 | POST, PATCH/DELETE `:id` | `/api/courses`, `/api/markers`, `/api/lecture-slots`, `/api/series` | CRUD |
 | POST | `/api/series/:id/skip` `{date, unskip?}` | `skip_week` |

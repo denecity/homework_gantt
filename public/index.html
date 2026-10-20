@@ -7,6 +7,12 @@
     <meta name="color-scheme" content="dark" />
     <title>Homework</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Homework" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
@@ -29,9 +35,13 @@
           <button id="zoomIn" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
         </div>
         <button id="nowBtn" class="btn-now" type="button" title="Jump to now (t)">Now</button>
+        <button id="settingsBtn" class="icon-btn top-icon" type="button" title="Notifications" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        </button>
       </div>
     </header>
 
+    <section id="nextUp" class="nextup" hidden aria-label="Next deadline"></section>
     <section id="shelf" class="shelf" hidden aria-label="Overdue"></section>
 
     <main id="scroller" class="scroller" tabindex="-1">
@@ -47,6 +57,7 @@
           </div>
         </div>
       </div>
+      <div id="mcanvas" class="mcanvas"></div>
       <div id="empty" class="empty" hidden></div>
     </main>
 

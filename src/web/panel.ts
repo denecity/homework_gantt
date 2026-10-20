@@ -1,10 +1,11 @@
 // Side panel (desktop) / bottom sheet (mobile) for viewing and editing a single thing.
 
 import type { TimelineItem } from "../shared/expand";
-import type { AppState, Course, Marker } from "../shared/schema";
+import type { AppState, Course, Marker, NotificationRule } from "../shared/schema";
 import { MINUTE, localInput, parseInstant, weekdayOf } from "../shared/time";
 import { api } from "./api";
-import { $, fmtFull, fmtSpan, fmtTime, h, urgencyOf } from "./util";
+import { canInstall, isInstalled, promptInstall, pushState, subscribe, unsubscribe, type PushConfig, type PushState } from "./push";
+import { $, fmtFull, fmtSpan, fmtTime, h, toast, urgencyOf } from "./util";
 
 export interface PanelHost {
   state(): AppState;
@@ -13,7 +14,11 @@ export interface PanelHost {
   items(): TimelineItem[];
 }
 
-type Target = { kind: "item"; id: string } | { kind: "course"; id: string } | { kind: "marker"; id: string };
+type Target =
+  | { kind: "item"; id: string }
+  | { kind: "course"; id: string }
+  | { kind: "marker"; id: string }
+  | { kind: "settings"; id: "" };
 
 const WEEKDAYS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -39,6 +44,9 @@ export class Panel {
   }
   openMarker(marker: Marker) {
     this.show({ kind: "marker", id: marker.id });
+  }
+  openSettings() {
+    this.show({ kind: "settings", id: "" });
   }
 
   close() {
@@ -77,9 +85,12 @@ export class Panel {
     } else if (t.kind === "course") {
       const course = state.courses.find((c) => c.id === t.id);
       content = course ? this.courseView(course, state) : null;
-    } else {
+    } else if (t.kind === "marker") {
       const marker = state.markers.find((m) => m.id === t.id);
       content = marker ? this.markerView(marker) : null;
+    } else {
+      content = this.settingsView(state);
+      void this.refreshPushState();
     }
     if (!content) return this.close();
     this.el.replaceChildren(h("div", { class: "grabber", "aria-hidden": "true" }), content);
@@ -293,6 +304,167 @@ export class Panel {
         h("button", { class: "btn primary", type: "submit" }, "Save"),
         h("button", { class: "btn ghost", type: "button", onclick: add }, "+ Assignment"),
         this.linkButton(course.link, "Open"),
+      ),
+    );
+  }
+
+  // ---- settings: install + notifications ---------------------------------------------------
+
+  private push: PushState = "unsupported";
+  private pushConfig: PushConfig = { publicKey: null, configured: false, devices: 0 };
+
+  private async refreshPushState() {
+    try {
+      this.pushConfig = await api.pushConfig();
+      this.push = await pushState(this.pushConfig);
+    } catch {
+      this.push = "unsupported";
+    }
+    if (this.target?.kind === "settings" && !this.dirty) this.render();
+  }
+
+  private describeRule(rule: NotificationRule): string {
+    const scope =
+      rule.applies_to === "assignments" ? "assignments" : rule.applies_to === "reviews" ? "lecture reviews" : "everything";
+    const courses = rule.course_ids.length ? ` · ${rule.course_ids.length} course${rule.course_ids.length > 1 ? "s" : ""}` : "";
+    if (rule.trigger_kind === "digest") {
+      const days = rule.weekdays.length ? rule.weekdays.map((d) => WEEKDAYS[d]).join(" ") : "every day";
+      return `${rule.at_time} ${days} · next ${rule.window_hours}h · ${scope}${courses}`;
+    }
+    const mins = Math.abs(rule.offset_minutes);
+    const span = mins >= 60 ? `${Math.round((mins / 60) * 10) / 10}h` : `${mins}m`;
+    const when = rule.offset_minutes === 0 ? "at" : rule.offset_minutes < 0 ? `${span} before` : `${span} after`;
+    return `${when} ${rule.anchor === "due" ? "deadline" : "release"} · ${scope}${courses}`;
+  }
+
+  private pushRow() {
+    const labels: Record<PushState, string> = {
+      unsupported: "This browser cannot do push notifications.",
+      unconfigured: "Push is not configured on the server yet.",
+      denied: "Notifications are blocked in your browser settings.",
+      default: "Notifications are off on this device.",
+      subscribed: "Notifications are on for this device.",
+    };
+    const toggle = async () => {
+      try {
+        this.push = this.push === "subscribed" ? await unsubscribe() : await subscribe(this.pushConfig);
+        toast(this.push === "subscribed" ? "Notifications on" : "Notifications off");
+      } catch (error) {
+        toast(error instanceof Error ? error.message : String(error), "error");
+      }
+      void this.refreshPushState();
+    };
+    const actionable = this.push === "default" || this.push === "subscribed";
+    return h(
+      "div",
+      { class: "p-status", "data-u": this.push === "subscribed" ? "done" : this.push === "denied" ? "overdue" : undefined },
+      h("strong", {}, labels[this.push]),
+      this.pushConfig.devices
+        ? h("span", {}, `${this.pushConfig.devices} device${this.pushConfig.devices > 1 ? "s" : ""} subscribed`)
+        : null,
+      actionable
+        ? h(
+            "button",
+            { class: `btn ${this.push === "subscribed" ? "ghost" : "primary"}`, type: "button", style: "margin-top:8px", onclick: toggle },
+            this.push === "subscribed" ? "Turn off on this device" : "Turn on notifications",
+          )
+        : null,
+    );
+  }
+
+  private installRow() {
+    if (isInstalled()) return h("p", { class: "p-note" }, "Running as an installed app. ✓");
+    if (canInstall()) {
+      return h(
+        "div",
+        { class: "p-actions" },
+        h(
+          "button",
+          {
+            class: "btn primary",
+            type: "button",
+            onclick: async () => {
+              if (await promptInstall()) toast("Installed");
+              this.render();
+            },
+          },
+          "Install app",
+        ),
+      );
+    }
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    return h(
+      "p",
+      { class: "p-note" },
+      ios
+        ? "To install: tap Share, then “Add to Home Screen”. iOS only allows notifications for the installed app."
+        : "To install, use your browser menu: “Install app” or “Add to Home screen”.",
+    );
+  }
+
+  private settingsView(state: AppState) {
+    const rules = state.notification_rules;
+    return h(
+      "div",
+      { class: "p-body" },
+      this.header(undefined, "This device", "Notifications"),
+      this.installRow(),
+      this.pushRow(),
+      h(
+        "div",
+        { class: "p-list" },
+        h("span", {}, `Rules (${rules.length})`),
+        rules.length
+          ? h(
+              "div",
+              { class: "rules" },
+              ...rules.map((rule) =>
+                h(
+                  "div",
+                  { class: `rule${rule.enabled ? "" : " off"}` },
+                  h(
+                    "button",
+                    {
+                      class: "rule-sw",
+                      type: "button",
+                      role: "switch",
+                      "aria-checked": rule.enabled ? "true" : "false",
+                      "aria-label": `Enable ${rule.label}`,
+                      onclick: () => void this.host.mutate(() => api.updateRule(rule.id, { enabled: !rule.enabled })),
+                    },
+                    h("i", {}),
+                  ),
+                  h("div", { class: "rule-text" }, h("b", {}, rule.label), h("small", {}, this.describeRule(rule))),
+                ),
+              ),
+            )
+          : h("small", {}, "No rules yet. Ask Claude to add some, e.g. “remind me 24h before every deadline”."),
+      ),
+      h(
+        "p",
+        { class: "p-note" },
+        "Rules are fully editable through Claude over MCP: timing, which courses they cover, the wording and quiet hours.",
+      ),
+      h(
+        "div",
+        { class: "p-actions" },
+        h(
+          "button",
+          {
+            class: "btn ghost",
+            type: "button",
+            disabled: this.push !== "subscribed",
+            onclick: async () => {
+              try {
+                const r = await api.testNotification();
+                toast(r.sent ? `Sent to ${r.sent} device${r.sent > 1 ? "s" : ""}` : "No devices subscribed", r.sent ? "info" : "error");
+              } catch (error) {
+                toast(error instanceof Error ? error.message : String(error), "error");
+              }
+            },
+          },
+          "Send test",
+        ),
       ),
     );
   }

@@ -1,9 +1,10 @@
 import { HttpError } from "./db";
 import { handleMcp } from "./mcp";
-import { runOperation, type OperationName } from "./service";
+import { dispatchDue, runOperation, type OperationName } from "./service";
 
-interface Env {
-  DB: D1Database;
+import type { Env as ServiceEnv } from "./service";
+
+interface Env extends ServiceEnv {
   ASSETS: Fetcher;
 }
 
@@ -38,6 +39,19 @@ const ROUTES: Route[] = [
   ["PATCH", /^\/api\/series\/([^/]+)$/, "update_series", withId],
   ["DELETE", /^\/api\/series\/([^/]+)$/, "delete_series", withId],
   ["POST", /^\/api\/series\/([^/]+)\/skip$/, "skip_week", (m) => ({ series_id: decodeURIComponent(m[1]!) })],
+  ["GET", /^\/api\/settings$/, "get_settings"],
+  ["PATCH", /^\/api\/settings$/, "update_settings"],
+  ["POST", /^\/api\/settings\/reset$/, "reset_settings"],
+  ["GET", /^\/api\/push\/config$/, "get_push_config"],
+  ["POST", /^\/api\/push\/subscribe$/, "subscribe_push"],
+  ["POST", /^\/api\/push\/unsubscribe$/, "unsubscribe_push"],
+  ["POST", /^\/api\/notifications\/test$/, "send_test_notification"],
+  ["POST", /^\/api\/notifications\/run$/, "run_notifications_now"],
+  ["GET", /^\/api\/notifications\/preview$/, "preview_notifications"],
+  ["GET", /^\/api\/notification-rules$/, "list_notification_rules"],
+  ["POST", /^\/api\/notification-rules$/, "create_notification_rule"],
+  ["PATCH", /^\/api\/notification-rules\/([^/]+)$/, "update_notification_rule", withId],
+  ["DELETE", /^\/api\/notification-rules\/([^/]+)$/, "delete_notification_rule", withId],
 ];
 
 const NUMERIC = new Set(["days"]);
@@ -47,6 +61,17 @@ function queryInput(url: URL): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of url.searchParams) out[k] = NUMERIC.has(k) ? Number(v) : BOOLEAN.has(k) ? v === "true" : v;
   return out;
+}
+
+/** An empty body means "no arguments", which is valid for actions like reset. */
+async function readJsonBody(request: Request): Promise<unknown> {
+  const text = (await request.text()).trim();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new HttpError(400, "invalid JSON body");
+  }
 }
 
 async function handleApi(request: Request, url: URL, env: Env): Promise<Response> {
@@ -60,10 +85,9 @@ async function handleApi(request: Request, url: URL, env: Env): Promise<Response
       throw new HttpError(pathExists ? 405 : 404, pathExists ? "method not allowed" : "not found");
     }
     const [[, , opName, merge], match] = route;
-    const body = request.method === "GET" || request.method === "DELETE" ? queryInput(url) : await request.json().catch(() => {
-      throw new HttpError(400, "invalid JSON body");
-    });
-    const result = await runOperation(opName, { ...(body as object), ...(merge ? merge(match!) : {}) }, env.DB);
+    const body =
+      request.method === "GET" || request.method === "DELETE" ? queryInput(url) : await readJsonBody(request);
+    const result = await runOperation(opName, { ...(body as object), ...(merge ? merge(match!) : {}) }, env);
     return typeof result === "string"
       ? new Response(result, { headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" } })
       : Response.json(result, { headers });
@@ -77,9 +101,18 @@ async function handleApi(request: Request, url: URL, env: Env): Promise<Response
 }
 
 export default {
+  /** Cron trigger: fire any notifications that came due since the last run. */
+  async scheduled(_event, env, ctx): Promise<void> {
+    ctx.waitUntil(
+      dispatchDue(env, Date.now()).catch((error) => {
+        console.error("notification dispatch failed", error);
+      }),
+    );
+  },
+
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === "/mcp") return handleMcp(request, env.DB);
+    if (url.pathname === "/mcp") return handleMcp(request, env);
     if (url.pathname.startsWith("/api/")) return handleApi(request, url, env);
     return env.ASSETS.fetch(request);
   },

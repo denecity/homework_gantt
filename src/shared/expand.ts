@@ -182,10 +182,14 @@ export function timelineItems(state: AppState): TimelineItem[] {
   return items.sort((a, b) => a.endMs - b.endMs);
 }
 
-/** Reviews stop nagging a week after their window closed; assignments stay overdue until done. */
-export const REVIEW_OVERDUE_GRACE = 7 * DAY;
+/** Items the timeline should draw, after the show_reviews / hide_done settings. */
+export function viewItems(state: AppState): TimelineItem[] {
+  const { show_reviews: showReviews, hide_done: hideDone } = state.settings;
+  return timelineItems(state).filter((i) => (showReviews || i.kind !== "review") && !(hideDone && i.done));
+}
 
-export function isOverdue(item: TimelineItem, now: number): boolean {
+/** Reviews stop nagging after `graceDays`; assignments stay overdue until they are done. */
+export function isOverdue(item: TimelineItem, now: number, graceDays = 7): boolean {
   if (item.done || item.endMs >= now) return false;
-  return item.kind === "assignment" || now - item.endMs < REVIEW_OVERDUE_GRACE;
+  return item.kind === "assignment" || now - item.endMs < graceDays * DAY;
 }
