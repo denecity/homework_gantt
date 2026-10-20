@@ -1,108 +1,126 @@
-# Homework Gantt (Cloudflare Pages)
+# Homework Gantt
 
-Config-driven homework tracker with:
+A vertical, dark-mode timeline of the current semester's homework. It runs as a Cloudflare Worker with D1
+and has a built-in **MCP server**, so Claude can set it up and edit it.
 
-- real-time scrolling 10-day Gantt window (now centered)
-- release-to-deadline bars
-- click bar body to toggle done/undone; click bar text to open optional link
-- persistent done state across devices via Cloudflare KV
+- One column per course. Time runs top to bottom, with a live "now" line.
+- Assignment cards run from release to deadline. They show a countdown, a progress fill, done state and an overdue shelf.
+- **Lecture reviews:** every lecture creates a review window (lecture end → +48h) to go over that lecture.
+- Semester dates, breaks and exams appear as markers. The view is limited to the semester.
+- Zoom (buttons, `+`/`−`, ctrl+scroll, pinch), jump to now, and a click-to-edit panel (a bottom sheet on mobile).
+- Drag a card's bottom edge to move its deadline. Keyboard: `j/k` move, `x` done, `Enter` open, `t` now, `Esc` close.
+- Open tabs pick up changes made through MCP or on other devices within about 15s.
 
-## Project structure
+Design decisions and the data model are in [SPEC.md](SPEC.md). **There is no auth by design:** anyone with the URL can
+read and edit.
 
-- `public/index.html` - HTML entry point
-- `public/app.js` - timeline + UI logic
-- `public/styles.css` - styling
-- `public/config/homework.json` - assignment config
-- `functions/api/status.js` - persistent API for done status
+## Stack
 
-## Deployment model
-
-- Cloudflare Pages with Git integration (branch: `main`)
-- Dashboard-managed bindings (KV is configured in Pages settings, not in repo)
-
-## Edit assignments
-
-Update `public/config/homework.json`:
-
-```json
-{
-  "assignments": [
-    {
-      "id": "unique-id",
-      "lecture": "Lecture name",
-      "release": "2026-02-24T09:00:00",
-      "deadline": "2026-03-01T23:59:00",
-      "repeatWeekly": false,
-      "color": "#0F6C7A",
-      "link": "https://example.edu/course/homework/1"
-    }
-  ]
-}
+```
+wrangler.jsonc        Worker + static assets (public/) + D1 binding DB
+migrations/           D1 schema
+src/shared/           zod schemas, Europe/Zurich time helpers, series/lecture expansion, lane packing
+src/worker/           router (index.ts), SQL (db.ts), operations (service.ts), MCP (mcp.ts)
+src/web/              frontend TypeScript, bundled by esbuild into public/app.js
+test/                 vitest
 ```
 
-Notes:
+The REST API and the MCP tools both come from the same `operations` table in `src/worker/service.ts`.
 
-- `id` must stay stable so done state persists.
-- `lecture` is printed directly on the bar.
-- `link` is optional; when present, clicking bar text opens it in a new tab.
-- `repeatWeekly` controls whether the assignment repeats every 7 days.
-- `color` accepts hex only (`#RGB`, `#RRGGBB`, `#RRGGBBAA`).
-- Date-time strings are interpreted in browser local time when no timezone suffix is provided.
+## Local development
 
-## Cloudflare Pages setup (Git-based)
+Needs Node 20+.
 
-1. Ensure this repo is connected as a **Pages** project.
-2. Build settings (Production + Preview):
-   - Framework preset: `None`
-   - Build command: *(leave empty)*
-   - Build output directory: `public`
-   - Root directory: `/`
-   - Production branch: `main`
-3. Configure KV namespaces in Cloudflare:
-   - Create one production namespace for done-state persistence.
-   - Create one preview namespace for preview deployments.
-4. In Pages project settings, add KV binding:
-   - Variable name: `HOMEWORK_KV`
-   - Production environment -> production namespace
-   - Preview environment -> preview namespace
-5. Deploy by pushing commits to `main`.
+```bash
+npm install
+```
 
-Expected successful deploy behavior:
+```bash
+npm run db:migrate:local
+```
 
-- no `Executing user deploy command: npx wrangler deploy`
-- no `Missing entry-point to Worker script or to assets directory`
-- Pages deployment publishes successfully
+```bash
+npm run dev
+```
 
-## Local dev
+In a second terminal, you can fill the local database with demo data. This also exercises the MCP endpoint:
 
-- Static preview (no persistence): `python3 -m http.server 8788 --directory public`
-- Then open `http://localhost:8788`
+```bash
+npm run db:seed:demo
+```
 
-Notes:
+Open http://localhost:8787. Other useful commands:
 
-- Local static preview does not provide `/api/status`.
-- The UI still loads assignments; persistence works once deployed with KV binding.
+```bash
+npm test
+```
 
-## Temporary fallback (if migration is blocked)
+```bash
+npm run typecheck
+```
 
-If your current pipeline still forces a deploy command, use:
+## Deploy (Cloudflare, via wrangler)
 
-- `npx wrangler pages deploy public --project-name homework-gantt`
+1. Log in once (opens a browser):
 
-This is only a temporary unblock. Preferred setup is native Pages Git builds.
+   ```bash
+   npx wrangler login
+   ```
 
-## Troubleshooting
+2. Create the D1 database, write its id into `wrangler.jsonc`, run migrations and deploy:
 
-If deploy logs show `Executing user deploy command: npx wrangler deploy`, this is a Worker deployment, not Pages Functions.
+   ```bash
+   npm run setup:remote
+   ```
 
-Symptoms:
+3. Later deploys:
 
-- site opens, but checking homework does not sync
-- `/api/status` returns `404`
-- deployment URL is `*.workers.dev`
+   ```bash
+   npm run deploy
+   ```
 
-Fix:
+   Run `npm run db:migrate:remote` first if new files were added under `migrations/`.
 
-1. Move to Cloudflare Pages Git build settings (section above).
-2. Keep build command empty and output directory `public`.
-3. Add `HOMEWORK_KV` binding in Pages settings for both Production and Preview.
+The old Cloudflare **Pages** project (Git integration + KV) is no longer used. Disconnect or delete it in the
+Cloudflare dashboard, otherwise pushes to `main` will keep deploying a broken static copy.
+
+## Connecting Claude (MCP)
+
+The MCP endpoint is `https://<your-worker>.workers.dev/mcp` (Streamable HTTP, stateless, no auth).
+
+- **claude.ai / Claude desktop:** Settings → Connectors → *Add custom connector* → paste the URL.
+- **Claude Code:**
+
+  ```bash
+  claude mcp add --transport http homework https://<your-worker>.workers.dev/mcp
+  ```
+
+Tools: `get_briefing`, `week_summary`, `get_upcoming`, `get_overdue`, `list_assignments`, `get_state`,
+`set_semester`, `create/update/delete_marker`, `create/update/delete_course`, `reorder_courses`, `create/update/delete_lecture_slot`,
+`create/update/delete_series`, `skip_week`, `create/update/delete_assignment`, `move_deadline`, `set_done`.
+There is also a `homework_briefing` prompt.
+
+### Typical semester setup (Chrome → MCP)
+
+Ask Claude to read the course pages and then:
+
+1. `set_semester`: name, first day, last day of the exam session, last lecture day
+2. `create_marker`: semester start/end, lecture-free weeks (`break` with `end_at`), exam session, exams (`exam` with `course_id`)
+3. `create_course` for each course: id, name, abbreviation, color, Moodle link
+4. `create_lecture_slot` for each weekly lecture (this is what creates the review windows)
+5. `create_series` for weekly exercise sheets (first release + first deadline, repeats weekly until the last lecture), or `create_assignment` for one-offs
+
+Times without a timezone, like `2026-09-21T12:00`, are read as Europe/Zurich.
+
+## REST API
+
+| Method | Path | Operation |
+|---|---|---|
+| GET | `/api/state`, `/api/version`, `/api/briefing?days=3`, `/api/upcoming?days=7`, `/api/overdue` | reads |
+| PUT | `/api/semester` | `set_semester` |
+| POST | `/api/done` `{id, done}` | `set_done` (assignment id or review id `slot@YYYY-MM-DD`) |
+| GET/POST | `/api/assignments` | list / create |
+| PATCH/DELETE | `/api/assignments/:id` | update / delete |
+| PUT | `/api/courses/order` `{ids}` | `reorder_courses` |
+| POST, PATCH/DELETE `:id` | `/api/courses`, `/api/markers`, `/api/lecture-slots`, `/api/series` | CRUD |
+| POST | `/api/series/:id/skip` `{date, unskip?}` | `skip_week` |

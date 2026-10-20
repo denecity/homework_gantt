@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "homework-gantt",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-05-01",
+  "build": {
+    "command": "npm run build:web",
+    "watch_dir": ["src/web", "src/shared"]
+  },
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/mcp"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "homework-gantt",
+      "database_id": "5a5ef80b-ccea-42cf-81d8-c2d79f8725f6",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "workers_dev": true,
+  "routes": [{ "pattern": "hw.mykinsky.org", "custom_domain": true }],
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "homework-gantt",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "esbuild src/web/main.ts --bundle --format=esm --target=es2022 --minify --sourcemap --outfile=public/app.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply homework-gantt --local",
+    "db:migrate:remote": "wrangler d1 migrations apply homework-gantt --remote",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/web",
+    "test": "vitest run",
+    "db:seed:demo": "node scripts/seed-demo.mjs",
+    "setup:remote": "node scripts/setup-remote.mjs"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.86.0",
+    "typescript": "^7.0.2",
+    "esbuild": "^0.28.2",
+    "vitest": "^4.1.11",
+    "@cloudflare/workers-types": "^4.20260702.1"
+  }
+}

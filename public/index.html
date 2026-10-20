@@ -2,19 +2,56 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Homework Gantt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0c11" />
+    <meta name="color-scheme" content="dark" />
+    <title>Homework</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" type="module" defer></script>
   </head>
   <body>
-    <main class="layout">
-      <section class="chart">
-        <div class="axis-lane" id="axisLane" aria-hidden="true"></div>
-        <div id="rows" class="rows"></div>
-      </section>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <strong id="semesterName">Homework</strong>
+          <span id="semesterMeta" class="muted"></span>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Zoom">
+          <button id="zoomOut" type="button" title="Zoom out (−)" aria-label="Zoom out">−</button>
+          <span id="zoomLabel" class="seg-label">1 wk</span>
+          <button id="zoomIn" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
+        </div>
+        <button id="nowBtn" class="btn-now" type="button" title="Jump to now (t)">Now</button>
+      </div>
+    </header>
 
-      <p id="statusText" class="status" role="status"></p>
+    <section id="shelf" class="shelf" hidden aria-label="Overdue"></section>
+
+    <main id="scroller" class="scroller" tabindex="-1">
+      <div id="canvas" class="canvas">
+        <div id="heads" class="heads"></div>
+        <div id="body" class="body">
+          <div id="gutter" class="gutter"></div>
+          <div id="grid" class="grid">
+            <div id="days" class="layer"></div>
+            <div id="markers" class="layer"></div>
+            <div id="cols" class="cols"></div>
+            <div class="now-line" aria-hidden="true"><span id="nowPill" class="now-pill"></span></div>
+          </div>
+        </div>
+      </div>
+      <div id="empty" class="empty" hidden></div>
     </main>
-    <script src="/app.js" defer></script>
+
+    <div id="scrim" class="scrim" hidden></div>
+    <aside id="panel" class="panel" aria-hidden="true" role="dialog" aria-modal="false"></aside>
+    <div id="toast" class="toast" role="status" hidden></div>
   </body>
 </html>

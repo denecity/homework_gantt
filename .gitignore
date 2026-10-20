@@ -7,3 +7,6 @@ yarn-debug.log*
 yarn-error.log*
 .env
 .env.*
+public/app.js
+public/app.js.map
+.dev.vars
