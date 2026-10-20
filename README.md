@@ -13,8 +13,13 @@ and has a built-in **MCP server**, so Claude can set it up and edit it.
 - Open tabs pick up changes made through MCP or on other devices within about 15s.
 - On phones each card is a **pennant**: its body floats wherever there is room, but its left side sweeps
   to a sharp point touching the axis at the exact deadline. Deadlines minutes apart can stack without
-  crowding. Releases are dotted lines with a small "… opens" label; labels join the same stacking sweep,
-  so nothing ever overlaps.
+  crowding — and when they do collide, placement is solved by isotonic regression, so the cluster settles
+  around its own centre and the cusps stay as short as possible. Releases are dotted lines with a small
+  "… opens" label; labels join the same stacking sweep, so nothing ever overlaps.
+
+  Give a series a release time and a deadline time that differ. With a weekly series set to the same time
+  of day, each sheet opens at the exact instant the previous one is due, and the release mark lands on the
+  deadline. `create_series` returns a warning when it spots this.
 
 Design decisions and the data model are in [SPEC.md](SPEC.md). **There is no auth by design:** anyone with the URL can
 read and edit.

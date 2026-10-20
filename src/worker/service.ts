@@ -24,7 +24,7 @@ import {
   type NotificationRule,
   type Series,
 } from "../shared/schema";
-import { DAY, HOUR, addDays, localInput, parseInstant, startOfDay, toIso, weekdayOf, dateKey } from "../shared/time";
+import { DAY, HOUR, addDays, daysBetween, localInput, parseInstant, splitLocal, startOfDay, toIso, weekdayOf, dateKey } from "../shared/time";
 import { bytesToB64url, sendPush, type VapidKeys } from "./push";
 import {
   HttpError,
@@ -86,6 +86,18 @@ function seriesRow(s: Series) {
   return { ...s, skip_dates: JSON.stringify([...new Set(s.skip_dates)].sort()) };
 }
 
+/**
+ * Warns when each occurrence opens at the exact instant the previous one is due. The timeline then
+ * draws a release mark on top of a deadline, and the two read as one event.
+ */
+export function collisionWarning(series: Series): string | null {
+  const release = splitLocal(series.first_release);
+  const due = splitLocal(series.first_due);
+  if (release.time !== due.time) return null;
+  if (daysBetween(release.date, due.date) % series.every_days !== 0) return null;
+  return `Each "${series.title_template.replace("{n}", "n")}" opens at exactly ${release.time}, the same moment the previous one is due, so releases and deadlines land on the same spot on the timeline. Shift one of the times by an hour if they are not really simultaneous.`;
+}
+
 /** Writes the series row and reconciles its assignments. Detached (individually edited) rows are left alone. */
 async function saveSeries(db: D1Database, series: Series) {
   assertRange(series.first_release, series.first_due);
@@ -118,7 +130,8 @@ async function saveSeries(db: D1Database, series: Series) {
     if (!stale.detached) stmts.push(db.prepare("DELETE FROM assignments WHERE id = ?").bind(stale.id));
   }
   await write(db, stmts);
-  return { series, occurrences: occurrences.length };
+  const warning = collisionWarning(series);
+  return { series, occurrences: occurrences.length, ...(warning ? { warning } : {}) };
 }
 
 // ---- text formatting for Claude ------------------------------------------------------
@@ -615,7 +628,7 @@ export const operations = {
   // series
   create_series: op({
     description:
-      "Create a recurring exercise series. Generates one assignment per period, from first_release/first_due until `until` (default: lecture end). Wall-clock times are Europe/Zurich.",
+      "Create a recurring exercise series. Generates one assignment per period, from first_release/first_due until `until` (default: lecture end). Wall-clock times are Europe/Zurich. Do not give first_release and first_due the same time of day a whole number of periods apart — each sheet would then open exactly when the previous one is due, and the release mark would sit on top of the deadline. The call still succeeds but returns a warning.",
     input: SeriesInput,
     run: async ({ db }, s) => {
       await ensureCourse(db, s.course_id);

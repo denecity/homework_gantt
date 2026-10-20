@@ -147,4 +147,8 @@ Times are stored as UTC ISO strings. Local wall-clock inputs (e.g. "Mon 12:00") 
 - [x] Settings model (`src/shared/settings.ts`), zod-free defaults so the browser bundle stays ~47 KB
 - [x] Phone view (`src/web/mobile.ts`), swappable live when the layout setting changes
 - [x] Settings sheet in the app: install state, notification toggle, rule list with on/off switches, test send
-- [x] Tests: 30 passing (time, expansion, lanes, notification planning, settings)
+- [x] Tests: 35 passing (time, expansion, lanes, notification planning, settings, balanced placement)
+- [x] Phone background matches the desktop grid: day lines, weekend tint, night shading, hour lines at high zoom
+- [x] Balanced placement: isotonic regression (pool-adjacent-violators) minimises total displacement, so a
+      cluster settles around its own centre and the cusps stay short, instead of a greedy downward shove
+- [x] `create_series` warns when a series would open at the exact moment the previous one is due

@@ -4,7 +4,7 @@
    - Static assets: stale-while-revalidate, so the app opens offline.
    - Push: shows the notification built by the Worker's rules. */
 
-const CACHE = "hw-v3";
+const CACHE = "hw-v4";
 const SHELL = ["/", "/index.html", "/app.js", "/styles.css", "/favicon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -45,6 +45,20 @@ self.addEventListener("fetch", (event) => {
   // Never cache the API: stale homework is worse than no homework.
   if (url.pathname.startsWith("/api/") || url.pathname === "/mcp") {
     event.respondWith(fetch(request).catch(() => new Response("{}", { headers: { "Content-Type": "application/json" } })));
+    return;
+  }
+
+  // The app shell is network-first too: otherwise a fresh index.html would pair with a stale
+  // app.js/styles.css for one load after every deploy. Cache still covers offline.
+  if (url.pathname === "/app.js" || url.pathname === "/styles.css") {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) caches.open(CACHE).then((c) => c.put(request, res.clone()));
+          return res;
+        })
+        .catch(() => caches.match(request)),
+    );
     return;
   }
 

@@ -11,6 +11,7 @@
 // what opens.
 
 import { expandLectures, viewItems, type TimelineItem } from "../shared/expand";
+import { balancePositions } from "../shared/layout";
 import type { AppState, Course, Marker } from "../shared/schema";
 import type { Settings } from "../shared/settings-defaults";
 import { MINUTE, addDays, dateKey, parseInstant, startOfDay, weekdayOf } from "../shared/time";
@@ -20,7 +21,7 @@ import type { TimelineCallbacks, TimelineView } from "./view";
 const CARD_H = 58;
 const REVIEW_H = 40;
 const GAP = 7;
-const TAPER = 54; // horizontal room the cusp needs to read as a point
+const TAPER = 34; // horizontal room the cusp needs; narrow, so the text keeps the width
 const RIGHT_PAD = 8;
 const RADIUS = 12;
 const RELEASE_H = 15;
@@ -77,6 +78,7 @@ export class MobileTimeline implements TimelineView {
   private canvas = $("mcanvas");
   private gutter = h("div", { class: "mgut" });
   private grid = h("div", { class: "mgrid" });
+  private days = h("div", { class: "mlayer mdays" });
   private marks = h("div", { class: "mlayer mmarks" });
   private rails = h("div", { class: "mlayer mrails" });
   private releases = h("div", { class: "mlayer mreleases" });
@@ -94,6 +96,7 @@ export class MobileTimeline implements TimelineView {
   private lastDate = "";
   private now = Date.now();
   private width = 0;
+  private density = "";
   private placed: Placed[] = [];
   private releaseMarks: ReleaseMark[] = [];
   private cards = new Map<string, CardRef>();
@@ -121,7 +124,7 @@ export class MobileTimeline implements TimelineView {
     this.pxh = (settings.remember_zoom ? read() : null) ?? settings.phone_zoom_pxh;
     this.shapes.setAttribute("class", "mshapes");
     this.canvas.replaceChildren(this.gutter, this.grid);
-    this.grid.append(this.marks, this.rails, this.releases, this.shapes, this.lane, this.nowLine);
+    this.grid.append(this.days, this.marks, this.rails, this.releases, this.shapes, this.lane, this.nowLine);
     document.body.dataset.view = "mobile";
     this.applyZoom();
     this.bindPinch();
@@ -198,22 +201,21 @@ export class MobileTimeline implements TimelineView {
     }
     blocks.sort((a, b) => a.at - b.at);
 
+    // A card wants its middle on the deadline; a label hangs just under its line.
+    const ys = blocks.map((b) => this.y(b.at));
+    const ideals = blocks.map((b, i) => (b.kind === "card" ? ys[i]! - b.height / 2 : ys[i]! + 2));
+    const tops = balancePositions(ideals, blocks.map((b) => b.height), GAP);
+
     const placed: Placed[] = [];
     const marks: ReleaseMark[] = [];
-    let floor = -Infinity;
-
-    for (const block of blocks) {
-      const y = this.y(block.at);
-      // A card prefers its middle on the deadline; a label hangs just under its line.
-      const ideal = block.kind === "card" ? y - block.height / 2 : y + 2;
-      const top = Math.max(ideal, floor + GAP);
-      floor = top + block.height;
+    blocks.forEach((block, i) => {
+      const top = tops[i]!;
       if (block.kind === "card") {
-        placed.push({ item: block.item, course: courses.get(block.item.course_id), top, height: block.height, dueY: y });
+        placed.push({ item: block.item, course: courses.get(block.item.course_id), top, height: block.height, dueY: ys[i]! });
       } else {
-        marks.push({ course: block.course, title: block.title, y, labelTop: top });
+        marks.push({ course: block.course, title: block.title, y: ys[i]!, labelTop: top });
       }
-    }
+    });
     this.placed = placed;
     this.releaseMarks = marks;
 
@@ -233,6 +235,7 @@ export class MobileTimeline implements TimelineView {
   private renderGrid() {
     const state = this.state!;
     this.gutter.replaceChildren();
+    this.days.replaceChildren();
     const first = dateKey(this.origin);
     const dense = this.pxh >= 14;
 
@@ -242,6 +245,7 @@ export class MobileTimeline implements TimelineView {
       const weekday = weekdayOf(date);
       const dayStart = startOfDay(date);
       const cls = `mday${weekday >= 6 ? " wknd" : ""}${weekday === 1 ? " mon" : ""}`;
+      this.days.append(h("div", { class: cls, style: `top:${top}px;height:${height}px` }));
       this.gutter.append(
         h(
           "div",
@@ -441,6 +445,13 @@ export class MobileTimeline implements TimelineView {
 
   private applyZoom() {
     this.root.style.setProperty("--mppm", String(this.pxh / 60));
+    // Same density ladder as the desktop view, so the day/night bands fade out when zoomed out.
+    const density = this.pxh < 1.2 ? "tiny" : this.pxh < 4 ? "low" : this.pxh < 16 ? "mid" : "high";
+    if (density !== this.density) {
+      this.density = density;
+      this.canvas.dataset.density = density;
+    }
+    this.root.style.setProperty("--mpxh", String(this.pxh));
     const hours = this.scroller.clientHeight / this.pxh;
     const label = document.getElementById("zoomLabel");
     if (label) label.textContent = hours < 36 ? `${Math.round(hours)} h` : `${Math.round(hours / 24)} d`;

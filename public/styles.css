@@ -1146,9 +1146,35 @@ body:not([data-split="1"]) .mgrid::before { display: none; }
 
 .mlane { position: absolute; inset: 0; }
 
-.mshapes { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 1; }
-.mreleases { z-index: 2; }
-.mlane { z-index: 3; }
+/* day / night bands behind the lane, matching the desktop grid */
+.mdays { z-index: 0; }
+.mdays .mday {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--line);
+}
+.mdays .mday.mon { border-top-color: var(--line-strong); }
+.mdays .mday.wknd { background-color: rgba(255, 255, 255, .016); }
+
+.mcanvas[data-density="mid"] .mdays .mday,
+.mcanvas[data-density="high"] .mdays .mday {
+  background-image:
+    linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(255, 255, 255, .07) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(to bottom, rgba(0, 0, 0, .3) 0%, rgba(0, 0, 0, .3) 22%, transparent 32%, transparent 86%, rgba(0, 0, 0, .3) 96%);
+}
+.mcanvas[data-density="high"] .mdays .mday {
+  background-image:
+    linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(255, 255, 255, .08) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px calc(var(--mpxh, 9) * 1px)),
+    linear-gradient(to bottom, rgba(0, 0, 0, .3) 0%, rgba(0, 0, 0, .3) 22%, transparent 32%, transparent 86%, rgba(0, 0, 0, .3) 96%);
+}
+
+.mshapes { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 2; }
+/* under the pennants, so a release line never cuts across a card; its label sits in the gaps */
+.mreleases { z-index: 1; }
+.mrel-label { z-index: 3; }
+.mlane { z-index: 4; }
 
 /* where an assignment opens */
 .mrel {
@@ -1159,6 +1185,7 @@ body:not([data-split="1"]) .mgrid::before { display: none; }
 }
 .mrel-label {
   position: absolute;
+  z-index: 3;
   left: 4px;
   padding: 1px 6px;
   border-radius: 6px;

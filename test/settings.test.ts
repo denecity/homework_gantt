@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { viewItems } from "../src/shared/expand";
+import { balancePositions } from "../src/shared/layout";
 import type { AppState } from "../src/shared/schema";
 import { DEFAULT_SETTINGS, Settings as SettingsSchema, describeSettings, parseSettings } from "../src/shared/settings";
 
@@ -68,5 +69,46 @@ describe("viewItems", () => {
 
     const noDone = viewItems({ ...base, settings: { ...DEFAULT_SETTINGS, hide_done: true } });
     expect(noDone.every((i) => !i.done)).toBe(true);
+  });
+});
+
+describe("balancePositions", () => {
+  it("leaves blocks alone when they already fit", () => {
+    expect(balancePositions([10, 100, 200], [50, 50, 50], 5)).toEqual([10, 100, 200]);
+  });
+
+  it("centres a colliding pair on their shared ideal instead of pushing both down", () => {
+    // Two cards both want top = 100; pushing would give [100, 155].
+    const tops = balancePositions([100, 100], [50, 50], 5);
+    expect(tops[0]).toBeCloseTo(72.5);
+    expect(tops[1]).toBeCloseTo(127.5);
+    // Equal and opposite displacement — the balanced answer.
+    expect(100 - tops[0]!).toBeCloseTo(tops[1]! - 100);
+  });
+
+  it("never overlaps and keeps order", () => {
+    const heights = [58, 40, 58, 15, 58];
+    const tops = balancePositions([200, 205, 210, 215, 600], heights, 7);
+    for (let i = 1; i < tops.length; i += 1) {
+      expect(tops[i]!).toBeGreaterThanOrEqual(tops[i - 1]! + heights[i - 1]! + 7 - 1e-6);
+    }
+  });
+
+  it("beats a greedy downward sweep on total displacement", () => {
+    const ideals = [200, 205, 210, 215];
+    const heights = [58, 58, 58, 58];
+    const balanced = balancePositions(ideals, heights, 7);
+    let floor = -Infinity;
+    const greedy = ideals.map((ideal, i) => {
+      const top = Math.max(ideal, floor + 7);
+      floor = top + heights[i]!;
+      return top;
+    });
+    const cost = (xs: number[]) => xs.reduce((sum, x, i) => sum + Math.abs(x - ideals[i]!), 0);
+    expect(cost(balanced)).toBeLessThan(cost(greedy));
+  });
+
+  it("keeps the first block on screen", () => {
+    expect(balancePositions([-500], [58], 7)[0]).toBe(4);
   });
 });

@@ -67,8 +67,10 @@ export const SeriesInput = z.object({
   id: Id,
   course_id: Id,
   title_template: z.string().min(1).optional().describe("'{n}' is replaced with the sheet number. Default 'Sheet {n}'"),
-  first_release: instant("release of the first sheet"),
-  first_due: instant("deadline of the first sheet"),
+  first_release: instant(
+    "release of the first sheet. Avoid giving this the same weekday AND time of day as first_due: with a weekly series that makes each sheet open at the exact moment the previous one is due, so the two land on the same spot on the timeline and overlap. Offset by an hour (or use the real times) to keep them apart",
+  ),
+  first_due: instant("deadline of the first sheet. See the note on first_release about matching times"),
   every_days: z.number().int().min(1).max(60).optional().describe("default 7"),
   until: DateStr.nullish().describe("no releases after this date; default lectures_end_on"),
   start_number: z.number().int().min(0).optional().describe("default 1"),
