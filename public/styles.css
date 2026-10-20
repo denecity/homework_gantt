@@ -1146,63 +1146,44 @@ body:not([data-split="1"]) .mgrid::before { display: none; }
 
 .mlane { position: absolute; inset: 0; }
 
-.mtail {
+.mshapes { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 1; }
+.mreleases { z-index: 2; }
+.mlane { z-index: 3; }
+
+/* where an assignment opens */
+.mrel {
   position: absolute;
-  width: 3px;
-  border-radius: 2px;
-  background: color-mix(in oklab, var(--c) 24%, transparent);
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in oklab, var(--c) 55%, transparent);
+}
+.mrel-label {
+  position: absolute;
+  left: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--c) 13%, var(--bg-2));
+  color: color-mix(in oklab, var(--c) 55%, var(--text));
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  max-width: calc(100% - 14px);
   overflow: hidden;
-}
-.mtail::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: calc(clamp(0, (var(--now) - var(--s)) / (var(--e) - var(--s)), 1) * 100%);
-  background: var(--c);
-  border-radius: 2px;
-}
-.mtail::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -3.5px;
-  width: 10px;
-  height: 3px;
-  border-radius: 2px;
-  background: color-mix(in oklab, var(--c) 55%, transparent);
-}
-.mtail.done { opacity: .3; }
-.manchor {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  margin-top: -4px;
-  border-radius: 50%;
-  background: var(--c);
-  box-shadow: 0 0 0 2.5px var(--bg-2);
-}
-.mlead {
-  position: absolute;
-  border-left: 1.5px dotted color-mix(in oklab, var(--c) 55%, transparent);
-  border-bottom: 1.5px dotted color-mix(in oklab, var(--c) 55%, transparent);
-  border-bottom-left-radius: 7px;
+  text-overflow: ellipsis;
 }
 
 .mcard {
   position: absolute;
-  left: calc(var(--l, 0) * 1% + 24px);
-  right: calc(var(--r, 0) * 1% + 8px);
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 11px 0 12px;
-  border-radius: 13px;
+  padding: 0 4px 0 2px;
+  background: none;
+  border: 0;
   overflow: hidden;
-  background: color-mix(in oklab, var(--c) 11%, var(--surface));
-  border: 1px solid color-mix(in oklab, var(--c) 30%, transparent);
-  box-shadow: inset 3px 0 0 var(--c), 0 2px 10px rgba(0, 0, 0, .3);
 }
-.mcard.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+.mcard.sel { outline: 2px solid var(--text); outline-offset: 3px; border-radius: 10px; }
 .mfill {
   position: absolute;
   inset: 0 auto 0 0;
@@ -1241,24 +1222,15 @@ body:not([data-split="1"]) .mgrid::before { display: none; }
 .mcd span { display: block; margin-top: 3px; font-size: 10px; color: var(--faint); }
 
 .mcard[data-u="soon"] .mcd b { color: var(--amber); }
-.mcard[data-u="urgent"] { border-color: color-mix(in oklab, var(--red) 65%, transparent); }
 .mcard[data-u="urgent"] .mcd b { color: var(--red); }
-.mcard[data-u="overdue"] { border: 1px dashed var(--red); background: color-mix(in oklab, var(--red) 10%, var(--surface)); }
 .mcard[data-u="overdue"] .mcd b, .mcard[data-u="overdue"] .mcd span { color: var(--red); }
-.mcard[data-u="future"] { background: color-mix(in oklab, var(--c) 5%, var(--bg-2)); box-shadow: inset 3px 0 0 color-mix(in oklab, var(--c) 45%, transparent); }
 .mcard[data-u="future"] .mtitle { color: var(--muted); }
-.mcard[data-u="done"] { opacity: .42; }
+.mcard[data-u="done"] { opacity: .5; }
 .mcard[data-u="done"] .mtitle { text-decoration: line-through; }
 .mcard[data-u="done"] .mchk { background: var(--green); border-color: var(--green); }
 .mcard[data-u="done"] .mchk::after { border-color: var(--bg); }
 
-.mcard.review {
-  left: calc(var(--l, 0) * 1% + 22px);
-  border-style: dashed;
-  box-shadow: none;
-  background: color-mix(in oklab, var(--c) 6%, var(--bg-2));
-  border-radius: 11px;
-}
+.mcard.review { gap: 8px; }
 .mcard.review .mchk { width: 21px; height: 21px; border-width: 1.5px; }
 .mcard.review .mchk::after { left: 6.6px; top: 3.3px; width: 5px; height: 9px; border-width: 0 2px 2px 0; }
 .mcard.review .mtitle { font-size: 12px; font-weight: 600; color: color-mix(in oklab, var(--c) 45%, var(--text)); }
@@ -1267,14 +1239,12 @@ body:not([data-split="1"]) .mgrid::before { display: none; }
 .mcard.review .mcd span { display: none; }
 
 /* Two narrow lanes: give the title every pixel the countdown does not need. */
-body[data-split="1"] .mcard { gap: 7px; padding: 0 8px 0 10px; }
 body[data-split="1"] .mcd span { display: none; }
 body[data-split="1"] .mcd b { font-size: 11.5px; }
 body[data-split="1"] .mtitle { font-size: 13px; }
 body[data-split="1"] .msub { font-size: 10.5px; }
 body[data-split="1"] .mchk { width: 23px; height: 23px; }
 body[data-split="1"] .mchk::after { left: 7.4px; top: 3.8px; width: 5.5px; height: 10px; }
-body[data-split="1"] .mcard.review { padding: 0 7px 0 8px; gap: 6px; }
 body[data-split="1"] .mcard.review .mbdg { font-size: 11px; }
 
 .mline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--mk, color-mix(in oklab, var(--accent) 70%, transparent)); }
@@ -1389,8 +1359,7 @@ body[data-split="1"] .mcard.review .mbdg { font-size: 11px; }
 
 @media (max-width: 720px) {
   .nextup { margin: 8px 10px 0; }
-  .mcard { left: calc(var(--l, 0) * 1% + 22px); right: calc(var(--r, 0) * 1% + 6px); }
-  .mcard.review { left: calc(var(--l, 0) * 1% + 20px); }
+  .mcard { padding-left: 0; }
 }
 
 /* progress fill can be switched off in settings */

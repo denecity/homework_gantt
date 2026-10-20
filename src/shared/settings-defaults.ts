@@ -4,6 +4,7 @@
 export interface Settings {
   phone_layout: "lane" | "columns";
   lane_mode: "split" | "single";
+  show_release_marks: boolean;
   work_lane_pct: number;
   work_lane_label: string;
   review_lane_label: string;
@@ -25,7 +26,8 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   phone_layout: "lane",
-  lane_mode: "split",
+  lane_mode: "single",
+  show_release_marks: true,
   work_lane_pct: 58,
   work_lane_label: "Work",
   review_lane_label: "Repetition",

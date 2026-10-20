@@ -15,9 +15,9 @@ export const Settings = z.object({
     .describe("Narrow screens: 'lane' = one full-width lane, cards anchored at the deadline; 'columns' = a column per course"),
   lane_mode: z
     .enum(["split", "single"])
-    .default("split")
+    .default("single")
     .describe(
-      "Lane layout: 'split' = two lanes, exercises/deadlines/submissions on one side and lecture repetition on the other; 'single' = everything in one lane",
+      "Lane layout: 'single' = one lane of pennant cards (each points at its own deadline); 'split' = two lanes, work on one side and lecture repetition on the other",
     ),
   work_lane_pct: z
     .number()
@@ -41,6 +41,10 @@ export const Settings = z.object({
     .describe("Screens at or below this width use phone_layout. 0 = never, 2000 = always"),
 
   // ---- what the timeline shows ------------------------------------------------------
+  show_release_marks: z
+    .boolean()
+    .default(true)
+    .describe("Phone: mark where each assignment opens with a dotted line and a small label"),
   show_next_up: z.boolean().default(true).describe("Banner above the timeline with the single most urgent open item"),
   show_overdue_shelf: z.boolean().default(true).describe("Strip of overdue items pinned at the top"),
   show_reviews: z.boolean().default(true).describe("Show lecture review windows at all"),

@@ -1,28 +1,33 @@
-// Phone layout: one full-width lane instead of per-course columns.
+// Phone layout: one lane of "pennant" cards.
 //
-// A card is anchored at its DEADLINE (its bottom edge) and a thin tail runs up to the RELEASE,
-// so both instants stay readable while the text gets the whole screen width. When two deadlines
-// are too close for both cards, the later one is pushed down and keeps a dotted leader back to
-// its true time.
+// A card's body floats wherever there is room, but its left side sweeps into a sharp point that
+// touches the time axis at the exact DEADLINE — the cusp of a `{`. That decouples where a card sits
+// from when it is due, so deadlines minutes apart can stack without crowding each other.
 //
-// Positions are resolved in pixels (stacking needs real heights), so layout runs on data or zoom
-// changes only. The clock tick just moves `--now` and refreshes visible countdowns.
+// The whole shape (taper + body) is one SVG path, so the outline stays continuous; the HTML card is a
+// transparent overlay on the rectangular part, which keeps text, tap targets and the checkbox normal.
+//
+// Releases are no longer bars: each one is a dotted line across the lane with a short label saying
+// what opens.
 
-import { expandLectures, packLanes, viewItems, type TimelineItem } from "../shared/expand";
+import { expandLectures, viewItems, type TimelineItem } from "../shared/expand";
 import type { AppState, Course, Marker } from "../shared/schema";
 import type { Settings } from "../shared/settings-defaults";
-import { HOUR, MINUTE, addDays, dateKey, parseInstant, startOfDay, weekdayOf } from "../shared/time";
+import { MINUTE, addDays, dateKey, parseInstant, startOfDay, weekdayOf } from "../shared/time";
 import { $, fmtDay, fmtFull, fmtMonth, fmtSpan, fmtSpanShort, fmtTime, h, urgencyOf } from "./util";
 import type { TimelineCallbacks, TimelineView } from "./view";
 
-const CARD_H = 62;
-const RAILS = 4; // tail sub-rails before colours start repeating
-const RAIL_W = 4;
+const CARD_H = 58;
 const REVIEW_H = 40;
-const GAP = 6;
+const GAP = 7;
+const TAPER = 54; // horizontal room the cusp needs to read as a point
+const RIGHT_PAD = 8;
+const RADIUS = 12;
+const RELEASE_H = 15;
 const MIN_PXH = 5;
 const MAX_PXH = 90;
 const PXH_KEY = "hg.mpxh";
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 interface Placed {
   item: TimelineItem;
@@ -30,12 +35,13 @@ interface Placed {
   top: number;
   height: number;
   dueY: number;
-  relY: number;
-  pushed: boolean;
-  /** Which sub-rail the tail uses, so concurrent windows stay distinguishable. */
-  rail: number;
-  /** 0 = work lane (exercises, deadlines, submissions), 1 = repetition lane. */
-  lane: number;
+}
+
+interface ReleaseMark {
+  course: Course;
+  title: string;
+  y: number;
+  labelTop: number;
 }
 
 interface CardRef {
@@ -59,6 +65,12 @@ const store = (v: number) => {
   }
 };
 
+const svgEl = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>) => {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  return el;
+};
+
 export class MobileTimeline implements TimelineView {
   private root = document.documentElement;
   private scroller = $("scroller");
@@ -67,8 +79,9 @@ export class MobileTimeline implements TimelineView {
   private grid = h("div", { class: "mgrid" });
   private marks = h("div", { class: "mlayer mmarks" });
   private rails = h("div", { class: "mlayer mrails" });
+  private releases = h("div", { class: "mlayer mreleases" });
+  private shapes = document.createElementNS(SVG_NS, "svg");
   private lane = h("div", { class: "mlane" });
-  private heads = h("div", { class: "mheads" });
   private nowLine = h("div", { class: "mnow" }, h("b", { id: "mNowPill" }));
 
   origin = 0;
@@ -78,10 +91,11 @@ export class MobileTimeline implements TimelineView {
   private pxh: number;
   private viewSig = "";
   private dataSig = "";
+  private lastDate = "";
   private now = Date.now();
+  private width = 0;
   private placed: Placed[] = [];
-  private split = true;
-  private workPct = 58;
+  private releaseMarks: ReleaseMark[] = [];
   private cards = new Map<string, CardRef>();
   private visible = new Set<CardRef>();
   private state: AppState | null = null;
@@ -100,12 +114,15 @@ export class MobileTimeline implements TimelineView {
     { root: this.scroller, rootMargin: "60% 0px" },
   );
 
-  constructor(private cb: TimelineCallbacks, settings: Settings) {
+  constructor(
+    private cb: TimelineCallbacks,
+    settings: Settings,
+  ) {
     this.pxh = (settings.remember_zoom ? read() : null) ?? settings.phone_zoom_pxh;
-    this.canvas.replaceChildren(this.heads, this.gutter, this.grid);
-    this.grid.append(this.marks, this.rails, this.lane, this.nowLine);
+    this.shapes.setAttribute("class", "mshapes");
+    this.canvas.replaceChildren(this.gutter, this.grid);
+    this.grid.append(this.marks, this.rails, this.releases, this.shapes, this.lane, this.nowLine);
     document.body.dataset.view = "mobile";
-    this.root.style.setProperty("--mheads-h", "34px");
     this.applyZoom();
     this.bindPinch();
   }
@@ -116,7 +133,6 @@ export class MobileTimeline implements TimelineView {
     this.cards.clear();
     this.visible.clear();
     delete document.body.dataset.view;
-    delete document.body.dataset.split;
   }
 
   private min(ms: number) {
@@ -125,17 +141,8 @@ export class MobileTimeline implements TimelineView {
   private y(ms: number) {
     return this.min(ms) * (this.pxh / 60);
   }
-  private get headsH() {
-    return this.heads.offsetHeight;
-  }
 
-  /** Horizontal bounds of a lane, as percentages of the grid width. */
-  private bounds(lane: number) {
-    if (!this.split) return { left: 0, right: 0 };
-    return lane === 0 ? { left: 0, right: 100 - this.workPct } : { left: this.workPct, right: 0 };
-  }
-
-  // ---- render ---------------------------------------------------------------------
+  // ---- render --------------------------------------------------------------------------
 
   render(state: AppState) {
     this.state = state;
@@ -150,85 +157,77 @@ export class MobileTimeline implements TimelineView {
       this.lastDate = last;
     }
 
-    this.split = state.settings.lane_mode === "split" && state.settings.show_reviews;
-    this.workPct = state.settings.work_lane_pct;
     this.items = viewItems(state);
     const sig = JSON.stringify([
       this.items.map((i) => [i.id, i.startMs, i.endMs, i.done, i.title]),
       state.courses.map((c) => [c.id, c.color, c.short]),
       state.markers.map((m) => [m.id, m.at, m.end_at, m.kind, m.label]),
       state.lecture_slots.map((s) => [s.id, s.weekday, s.start_time, s.end_time, s.skip_dates]),
-      [this.split, this.workPct, state.settings.work_lane_label, state.settings.review_lane_label],
+      [state.settings.show_lectures, state.settings.show_release_marks],
+      state.settings.show_release_marks ? state.assignments.map((a) => [a.id, a.release_at]) : [],
     ]);
-    if (sig !== this.dataSig || changed) {
+    if (sig !== this.dataSig || changed || this.width !== this.grid.clientWidth) {
       this.dataSig = sig;
       this.layout();
     }
     this.tick(this.now);
   }
 
-  private lastDate = "";
-
-  /** Chronological sweep: ideal position is "bottom edge on the deadline", pushed down on collision. */
+  /** Chronological sweep: a card wants its middle on the deadline, and gives way to the one above. */
   private layout() {
     const state = this.state!;
     const courses = new Map(state.courses.map((c) => [c.id, c]));
-    const visible = this.items.filter((i) => courses.has(i.course_id));
-    // Tails are packed as intervals so two live windows never sit on the same rail.
-    const rails = new Map(
-      packLanes(visible.map((item) => ({ item, start: item.startMs, end: item.endMs }))).map((p) => [
-        p.item.id,
-        p.lane % RAILS,
-      ]),
-    );
-    const sorted = [...visible].sort((a, b) => a.endMs - b.endMs);
-    const placed: Placed[] = [];
-    // Each lane stacks independently, so a busy week of exercises never pushes the reviews around.
-    const floors = [-Infinity, -Infinity];
+    this.width = this.grid.clientWidth || Math.max(this.scroller.clientWidth - 44, 240);
 
-    for (const item of sorted) {
-      const lane = this.split && item.kind === "review" ? 1 : 0;
-      const height = item.kind === "review" ? REVIEW_H : CARD_H;
-      const dueY = this.y(item.endMs);
-      const relY = this.y(item.startMs);
-      const top = Math.max(dueY - height, floors[lane]! + GAP);
-      floors[lane] = top + height;
-      placed.push({
-        item,
-        course: courses.get(item.course_id),
-        top,
-        height,
-        dueY,
-        relY,
-        pushed: top + height - dueY > 1,
-        rail: rails.get(item.id) ?? 0,
-        lane,
-      });
+    // Cards and release labels share one chronological sweep, so a label never lands on a card.
+    // The dotted line and the pennant tip keep their exact time; only the boxes give way.
+    type Block =
+      | { kind: "card"; at: number; height: number; item: TimelineItem }
+      | { kind: "rel"; at: number; height: number; course: Course; title: string };
+
+    const blocks: Block[] = this.items
+      .filter((i) => courses.has(i.course_id))
+      .map((item) => ({ kind: "card" as const, at: item.endMs, height: item.kind === "review" ? REVIEW_H : CARD_H, item }));
+
+    if (state.settings.show_release_marks) {
+      for (const a of state.assignments) {
+        const course = courses.get(a.course_id);
+        if (!course) continue;
+        blocks.push({ kind: "rel", at: parseInstant(a.release_at), height: RELEASE_H, course, title: a.title });
+      }
+    }
+    blocks.sort((a, b) => a.at - b.at);
+
+    const placed: Placed[] = [];
+    const marks: ReleaseMark[] = [];
+    let floor = -Infinity;
+
+    for (const block of blocks) {
+      const y = this.y(block.at);
+      // A card prefers its middle on the deadline; a label hangs just under its line.
+      const ideal = block.kind === "card" ? y - block.height / 2 : y + 2;
+      const top = Math.max(ideal, floor + GAP);
+      floor = top + block.height;
+      if (block.kind === "card") {
+        placed.push({ item: block.item, course: courses.get(block.item.course_id), top, height: block.height, dueY: y });
+      } else {
+        marks.push({ course: block.course, title: block.title, y, labelTop: top });
+      }
     }
     this.placed = placed;
+    this.releaseMarks = marks;
 
     const end = this.y(startOfDay(addDays(this.lastDate, 1)));
-    const bottom = placed.reduce((m, p) => Math.max(m, p.top + p.height), end);
-    this.canvas.style.height = `${bottom + 40}px`;
+    const bottom = Math.max(
+      placed.reduce((m, p) => Math.max(m, p.top + p.height), end),
+      marks.reduce((m, r) => Math.max(m, r.labelTop + RELEASE_H), end),
+    );
+    this.canvas.style.height = `${bottom + 48}px`;
 
-    this.renderHeads();
     this.renderGrid();
     this.renderMarkers();
+    this.renderReleases();
     this.renderCards();
-  }
-
-  private renderHeads() {
-    const s = this.state!.settings;
-    this.heads.hidden = !this.split;
-    document.body.dataset.split = this.split ? "1" : "0";
-    this.root.style.setProperty("--work-pct", String(this.workPct));
-    this.root.style.setProperty("--mheads-h", this.split ? "34px" : "0px");
-    if (!this.split) return;
-    this.heads.replaceChildren(
-      h("div", { class: "mcorner" }),
-      h("div", { class: "mhead work", style: `flex-basis:${this.workPct}%` }, s.work_lane_label),
-      h("div", { class: "mhead review", style: `flex-basis:${100 - this.workPct}%` }, s.review_lane_label),
-    );
   }
 
   private renderGrid() {
@@ -258,14 +257,11 @@ export class MobileTimeline implements TimelineView {
       );
       if (dense) {
         for (const hour of [6, 12, 18]) {
-          this.gutter.append(
-            h("span", { class: "mhlab", style: `top:${top + hour * (this.pxh)}px` }, `${String(hour).padStart(2, "0")}:00`),
-          );
+          this.gutter.append(h("span", { class: "mhlab", style: `top:${top + hour * this.pxh}px` }, `${String(hour).padStart(2, "0")}:00`));
         }
       }
     }
 
-    // lecture ticks live in the gutter so they never collide with cards
     this.rails.replaceChildren(
       ...(state.settings.show_lectures ? expandLectures(state.lecture_slots, state.semester, state.markers) : []).map((lec) => {
         const course = state.courses.find((c) => c.id === lec.course_id);
@@ -275,6 +271,19 @@ export class MobileTimeline implements TimelineView {
           title: `${course?.name ?? lec.course_id} lecture ${fmtTime(lec.startMs)}–${fmtTime(lec.endMs)}`,
         });
       }),
+    );
+  }
+
+  /** Dotted line where something opens, with a small label under it. */
+  private renderReleases() {
+    this.releases.replaceChildren(
+      ...this.releaseMarks.map(({ course, title, y, labelTop }) =>
+        h(
+          "div",
+          { class: "mrel", style: `--c:${course.color};top:${y}px` },
+          h("span", { class: "mrel-label", style: `top:${labelTop - y}px` }, `${course.short} ${title} opens`),
+        ),
+      ),
     );
   }
 
@@ -297,21 +306,35 @@ export class MobileTimeline implements TimelineView {
         return h(
           "div",
           { class: `mline mline-${m.kind}`, style: `top:${top}px${course ? `;--mk:${course.color}` : ""}` },
-          h(
-            "button",
-            { class: "mmlabel", type: "button", onclick: open(m) },
-            m.kind === "exam" ? "◆ " : "",
-            m.label,
-            h("small", {}, fmtFull(at)),
-          ),
+          h("button", { class: "mmlabel", type: "button", onclick: open(m) }, m.kind === "exam" ? "◆ " : "", m.label, h("small", {}, fmtFull(at))),
         );
       }),
+    );
+  }
+
+  /** Point on the axis at the deadline, swept out into the card's rounded body. */
+  private pennantPath(p: Placed): string {
+    const t = p.top;
+    const b = p.top + p.height;
+    const right = Math.max(this.width - RIGHT_PAD, TAPER + 40);
+    const dy = p.dueY;
+    const bend = TAPER * 0.55;
+    return (
+      `M 0 ${dy} ` +
+      `C ${bend} ${dy}, ${TAPER - 14} ${t}, ${TAPER + 6} ${t} ` +
+      `L ${right - RADIUS} ${t} Q ${right} ${t} ${right} ${t + RADIUS} ` +
+      `L ${right} ${b - RADIUS} Q ${right} ${b} ${right - RADIUS} ${b} ` +
+      `L ${TAPER + 6} ${b} ` +
+      `C ${TAPER - 14} ${b}, ${bend} ${dy}, 0 ${dy} Z`
     );
   }
 
   private renderCards() {
     const live = new Set<string>();
     const frag = document.createDocumentFragment();
+    const paths = document.createDocumentFragment();
+    this.shapes.setAttribute("width", String(this.width));
+    this.shapes.setAttribute("height", this.canvas.style.height.replace("px", "") || "0");
 
     for (const p of this.placed) {
       live.add(p.item.id);
@@ -322,50 +345,43 @@ export class MobileTimeline implements TimelineView {
         this.observer.observe(ref.el);
       }
       ref.item = p.item;
+
       const color = p.course?.color ?? "#888";
       const el = ref.el;
-      const b = this.bounds(p.lane);
-      el.className = `mcard${p.item.kind === "review" ? " review" : ""}${this.selectedId === p.item.id ? " sel" : ""}`;
-      el.style.cssText =
-        `--c:${color};--l:${b.left};--r:${b.right};top:${p.top}px;height:${p.height}px`;
+      const review = p.item.kind === "review";
+      el.className = `mcard${review ? " review" : ""}${this.selectedId === p.item.id ? " sel" : ""}`;
+      el.style.cssText = `--c:${color};top:${p.top}px;height:${p.height}px;left:${TAPER + 8}px;right:${RIGHT_PAD + 4}px`;
 
       const badge = el.querySelector(".mbdg")!;
       const title = el.querySelector(".mtitle")!;
       const sub = el.querySelector(".msub")!;
-      if (p.item.kind === "review") {
+      if (review) {
         badge.textContent = "↻";
-        // The lane header and the card's position already say it is a lecture review on that day.
-        title.textContent = p.course?.short ?? p.item.course_id;
+        title.textContent = `${p.course?.short ?? p.item.course_id} lecture`;
         sub.textContent = "";
       } else {
         badge.textContent = p.course?.short ?? p.item.course_id;
         title.textContent = p.item.title;
         sub.textContent = `due ${fmtDay(p.item.endMs)} ${fmtTime(p.item.endMs)}`;
       }
-      el.title = `${p.course?.name ?? ""} ${p.item.title}\n${fmtFull(p.item.startMs)} → ${fmtFull(p.item.endMs)}`;
+      el.title = `${p.course?.name ?? ""} ${p.item.title}\ndue ${fmtFull(p.item.endMs)}`;
       frag.append(el);
 
-      // tail (release → deadline) + anchor dot + leader when displaced
-      const topY = Math.max(p.relY, -60);
-      const x = 4 + p.rail * RAIL_W;
-      const at = (px: number) => `calc(${b.left}% + ${px}px)`;
-      frag.append(
-        h("div", {
-          class: `mtail${p.item.done ? " done" : ""}`,
-          style:
-            `--c:${color};left:${at(x)};top:${topY}px;height:${Math.max(p.dueY - topY, 4)}px;` +
-            `--s:${this.min(p.item.startMs)};--e:${this.min(p.item.endMs)}`,
+      const d = this.pennantPath(p);
+      const dim = p.item.done ? 0.4 : 1;
+      // A background-coloured halo first, so pennants stacked tightly stay separable.
+      paths.append(
+        svgEl("path", { d, fill: "none", stroke: "var(--bg-2)", "stroke-width": 3.5, opacity: dim }),
+        svgEl("path", {
+          d,
+          fill: review ? `color-mix(in oklab, ${color} 7%, var(--bg-2))` : `color-mix(in oklab, ${color} 13%, var(--surface))`,
+          stroke: `color-mix(in oklab, ${color} ${review ? 45 : 38}%, transparent)`,
+          "stroke-width": 1,
+          "stroke-dasharray": review ? "4 3" : "none",
+          opacity: dim,
         }),
-        h("div", { class: "manchor", style: `--c:${color};left:${at(x - 2.5)};top:${p.dueY}px` }),
+        svgEl("circle", { cx: 0, cy: p.dueY, r: 2.8, fill: color, opacity: dim }),
       );
-      if (p.pushed) {
-        frag.append(
-          h("div", {
-            class: "mlead",
-            style: `--c:${color};left:${at(x)};width:${22 - x}px;top:${p.dueY}px;height:${p.top + p.height - p.dueY}px`,
-          }),
-        );
-      }
     }
 
     for (const [id, ref] of this.cards) {
@@ -374,6 +390,7 @@ export class MobileTimeline implements TimelineView {
       this.visible.delete(ref);
       this.cards.delete(id);
     }
+    this.shapes.replaceChildren(paths);
     this.lane.replaceChildren(frag);
     for (const ref of this.cards.values()) this.paintCard(ref);
     if (this.selectedId && !this.cards.has(this.selectedId)) this.selectedId = null;
@@ -383,7 +400,6 @@ export class MobileTimeline implements TimelineView {
     const el = h(
       "div",
       { class: "mcard", "data-id": item.id, tabindex: "-1" },
-      h("div", { class: "mfill" }),
       h("button", { class: "mchk", type: "button", "aria-label": "Toggle done" }),
       h("div", { class: "mbody" }, h("div", { class: "ml1" }, h("span", { class: "mbdg" }), h("b", { class: "mtitle" })), h("div", { class: "msub" })),
       h("div", { class: "mcd" }, h("b", {}), h("span", {})),
@@ -406,15 +422,13 @@ export class MobileTimeline implements TimelineView {
     if (el.dataset.u !== u) el.dataset.u = u;
     const left = item.endMs - this.now;
     const [big, small] = el.querySelector(".mcd")!.children as unknown as [HTMLElement, HTMLElement];
-    // Narrow lanes get the one-unit countdown so the title keeps the space.
-    const compact = this.split || item.kind === "review";
-    const text = u === "done" ? "✓" : compact ? fmtSpanShort(left) : fmtSpan(left);
+    const text = u === "done" ? "✓" : item.kind === "review" ? fmtSpanShort(left) : fmtSpan(left);
     if (big.textContent !== text) big.textContent = text;
     const label = u === "done" ? "done" : u === "overdue" ? "late" : "left";
     if (small.textContent !== label) small.textContent = label;
   }
 
-  // ---- clock, zoom, scroll -------------------------------------------------------------
+  // ---- clock, zoom, scroll ----------------------------------------------------------------
 
   tick(now: number) {
     this.now = now;
@@ -451,12 +465,12 @@ export class MobileTimeline implements TimelineView {
   }
 
   scrollToTime(ms: number, fraction = 0.3, smooth = false) {
-    const visibleH = this.scroller.clientHeight;
-    this.scroller.scrollTo({ top: Math.max(0, this.y(ms) - visibleH * fraction), behavior: smooth ? "smooth" : "auto" });
+    this.scroller.scrollTo({ top: Math.max(0, this.y(ms) - this.scroller.clientHeight * fraction), behavior: smooth ? "smooth" : "auto" });
   }
 
   onResize() {
     this.applyZoom();
+    if (this.width !== this.grid.clientWidth) this.layout();
   }
 
   private bindPinch() {
@@ -490,11 +504,9 @@ export class MobileTimeline implements TimelineView {
       },
       { passive: false },
     );
-    void this.headsH;
-    void HOUR;
   }
 
-  // ---- selection ----------------------------------------------------------------------
+  // ---- selection --------------------------------------------------------------------------
 
   select(id: string | null, scroll = true) {
     if (this.selectedId) this.cards.get(this.selectedId)?.el.classList.remove("sel");

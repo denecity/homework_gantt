@@ -11,9 +11,10 @@ and has a built-in **MCP server**, so Claude can set it up and edit it.
 - Drag a card's bottom edge to move its deadline. Keyboard: `j/k` move, `x` done, `Enter` open, `t` now, `Esc` close.
 - **Installable** (PWA) with a service worker, and **push notifications** driven by rules you edit over MCP.
 - Open tabs pick up changes made through MCP or on other devices within about 15s.
-- On phones the timeline switches to two lanes — **Work** (exercises, deadlines, submissions) and
-  **Repetition** (lecture reviews). Cards sit at their deadline with a tail up to their release, and each
-  lane stacks independently. Layout, lane split and labels are settings, not hard-coded rules.
+- On phones each card is a **pennant**: its body floats wherever there is room, but its left side sweeps
+  to a sharp point touching the axis at the exact deadline. Deadlines minutes apart can stack without
+  crowding. Releases are dotted lines with a small "… opens" label; labels join the same stacking sweep,
+  so nothing ever overlaps.
 
 Design decisions and the data model are in [SPEC.md](SPEC.md). **There is no auth by design:** anyone with the URL can
 read and edit.

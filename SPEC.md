@@ -135,7 +135,8 @@ Times are stored as UTC ISO strings. Local wall-clock inputs (e.g. "Mon 12:00") 
 
 | Topic | Decision |
 |-------|----------|
-| Mobile layout | ✅ Two lanes — Work (exercises, deadlines, submissions) and Repetition (lecture reviews). Card anchored at its deadline, tail up to the release, each lane stacked independently with a leader line when deadlines collide. Desktop keeps columns. |
+| Mobile layout | ✅ **Pennant cards** in one lane: the card body floats, its left side tapers to a point on the axis at the exact deadline (the cusp of a `{`), so close deadlines stack without crowding. Shape drawn as a single SVG path with a background-coloured halo so stacked pennants stay separable; the HTML card is a transparent overlay on the rectangular part. Releases are dotted lines with a small label, stacked in the same sweep as the cards. Desktop keeps columns. |
+| Mobile scope | Only the deadline matters on the phone — the release-to-deadline bar is gone. Two lanes (Work / Repetition) were tried and dropped; `lane_mode` still offers them. |
 | Installable | ✅ PWA: manifest, generated icons, service worker (also deletes the old June caches) |
 | Notifications | ✅ Push via VAPID, sent by a Worker cron every 5 min |
 | Configurability | ✅ **Everything that was a design decision is now a setting or a rule, editable over MCP** — layouts, breakpoint, what the timeline shows, urgency thresholds, zoom defaults, and every notification rule |
